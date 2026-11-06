@@ -1,0 +1,62 @@
+---
+apiVersion: identity.tentuplaza.es/v1alpha2
+kind: TenTuIdPermissions
+metadata:
+  name: identity-admin-api
+spec:
+  permissions:
+  - id: identity:users:view
+    description: identity:users:view
+  - id: identity:users:create
+    description: identity:users:create
+  - id: identity:users:update:name
+    description: identity:users:update:name
+  - id: identity:users:update:email
+    description: identity:users:update:email
+  - id: identity:users:update:password
+    description: identity:users:update:password
+  - id: identity:users:update:roles
+    description: identity:users:update:roles
+  - id: identity:users:update:groups
+    description: identity:users:update:groups
+  - id: identity:users:activate
+    description: identity:users:activate
+  - id: identity:users:credentials:view
+    description: identity:users:credentials:view
+  - id: identity:users:credentials:delete
+    description: identity:users:credentials:delete
+  - id: identity:users:deactivate
+    description: identity:users:deactivate
+  - id: identity:users:delete
+    description: identity:users:delete
+  - id: identity:users:send-verification
+    description: identity:users:send-verification
+  - id: identity:users:send-password-reset
+    description: identity:users:send-password-reset
+  - id: identity:users:logout
+    description: identity:users:logout
+  - id: identity:roles:view
+    description: identity:roles:view
+  - id: identity:roles:manage
+    description: identity:roles:manage
+  - id: identity:groups:view
+    description: identity:groups:view
+  - id: identity:groups:manage
+    description: identity:groups:manage
+  - id: identity:invitations:view
+    description: Gestión de invitaciones · view
+  - id: identity:invitations:create
+    description: Gestión de invitaciones · create
+  - id: identity:invitations:update
+    description: Gestión de invitaciones · update
+  - id: identity:invitations:revoke
+    description: Gestión de invitaciones · revoke
+  - id: identity:invitations:delete
+    description: Eliminar permanentemente enlaces de invitación
+
+  - id: identity:users:recovery:create
+    description: Autorizar recuperación asistida tras verificar la identidad
+  - id: identity:users:recovery:revoke
+    description: Revocar enlaces y sesiones de recuperación asistida
+  - id: identity:users:recovery:view
+    description: Consultar el estado de recuperación sin ver el enlace secreto

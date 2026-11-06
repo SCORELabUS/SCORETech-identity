@@ -1,0 +1,4 @@
+{
+  "permissions": [],
+  "roles": ["administrador", "alumno", "interesado", "comercial", "profesor", "tech"]
+}

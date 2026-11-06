@@ -1,0 +1,1049 @@
+openapi: 3.1.0
+info:
+  title: SCORETech Identity Account API
+  version: 0.1.0
+  description:
+    'Personal account API for SCORETech Identity. Every target account is derived from the
+    verified JWT sub; this service owns no user database. Protected /v1/account operations require a
+    signed user token with the configured issuer, audience identity-account-api, exp, sub and sid.
+    No business role is required for personal account access. Effective administrative accounts must
+    satisfy the provider passkey policy. Responses containing account data use Cache-Control:
+    no-store.'
+servers:
+  - url: /identity/api/account
+    description: Public prefix for the default /identity deployment. Configure the prefix with the
+      deployment base path.
+security:
+  - bearerAuth: []
+paths:
+  /v1/account/me:
+    get:
+      summary: Read own account
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: getMe
+      tags:
+        - Account
+    patch:
+      summary: Update own profile
+      responses:
+        '204':
+          description: Success
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdate'
+      operationId: patchMe
+      tags:
+        - Account
+  /v1/account/sessions:
+    get:
+      summary: List own sessions
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sessions'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: getSessions
+      tags:
+        - Account
+  /v1/account/sessions/{sessionId}:
+    delete:
+      summary: Revoke an owned session
+      responses:
+        '204':
+          description: Success
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Session not owned or no longer active
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 300
+      operationId: deleteSessionsSessionId
+      tags:
+        - Account
+  /v1/account/logout:
+    post:
+      summary: Revoke own sessions
+      responses:
+        '204':
+          description: Success
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: postLogout
+      tags:
+        - Account
+  /v1/account/email-verification:
+    post:
+      summary: Request own email verification
+      responses:
+        '204':
+          description: Success
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Per-subject rate limit
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: postEmailVerification
+      tags:
+        - Account
+  /v1/account/avatar-upload:
+    post:
+      summary: Request own photo upload
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Upload'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Invalid or missing user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Per-subject rate limit
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - contentType
+              properties:
+                contentType:
+                  type: string
+                  enum:
+                    - image/jpeg
+                    - image/png
+                    - image/webp
+      description: Creates an S3 PUT URL valid for 300 seconds. Upload directly with matching
+        Content-Type; profile update checks subject ownership, object metadata and size <=5 MiB. The
+        API does not proxy image bytes. Availability is reported by GET /v1/account/me in
+        capabilities.avatarUpload. Disabled storage returns 503; no upload request should be offered
+        when the capability is false.
+      operationId: postAvatarUpload
+      tags:
+        - Account
+  /v1/account/security:
+    get:
+      summary: Read own real credential descriptors and one-time suggestion state
+      responses:
+        '200':
+          description: Projected credential state without secrets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+        '401':
+          description: Invalid token
+        '403':
+          description: Administrative passkey required when policy is active
+        '503':
+          description: Credential state unavailable
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: getSecurity
+      tags:
+        - Account
+      description:
+        Returns credential descriptors without secrets. administrator is true for the protected
+        administrator role or effective administrative service access, including delegated
+        operators.
+  /v1/account/security/passkey-suggestion:
+    post:
+      summary: Persist first suggestion presentation for the verified subject
+      responses:
+        '204':
+          description: Presentation persisted across browsers
+        '401':
+          description: Invalid token
+        '403':
+          description: Administrative passkey required when policy is active
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: postSecurityPasskeySuggestion
+      tags:
+        - Account
+  /v1/account/step-up:
+    post:
+      summary: Start verification of the current identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - scope
+                - origin
+              properties:
+                scope:
+                  const: self:security
+                origin:
+                  type: string
+                  format: uri
+      responses:
+        '200':
+          description: One-use subject/session/client/origin-bound ticket
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StepUp'
+        '401':
+          description: Invalid or missing signed-in session
+        '403':
+          description: Origin or client is not allowed
+        '429':
+          description: Too many verification attempts
+        '503':
+          description: Identity verification is unavailable
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: postStepUp
+      tags:
+        - Account
+  /v1/account/preferences:
+    get:
+      summary: Read own appearance preference
+      responses:
+        '200':
+          description: Effective preferences for verified subject
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Preferences'
+        '401':
+          description: Invalid user token
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: getPreferences
+      tags:
+        - Account
+    put:
+      summary: Set own appearance preference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferencesWrite'
+      responses:
+        '204':
+          description: Saved atomically to own profile
+        '400':
+          description: Invalid preferences
+        '401':
+          description: Invalid user token
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: putPreferences
+      tags:
+        - Account
+      description: Requires theme (light or dark). Unknown preference fields are rejected.
+  /v1/account/sessions/{sessionId}/activity:
+    get:
+      summary: Read security activity of an owned session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Retained events for this subject and session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionActivity'
+        '401':
+          description: Missing or invalid user access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource not found for this subject
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          description: Validation, authorization or identity dependency failure. See error.code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      operationId: getSessionsSessionIdActivity
+      tags:
+        - Account
+  /health:
+    get:
+      summary: Read process health
+      security: []
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                  - version
+                properties:
+                  status:
+                    const: UP
+                  service:
+                    const: identity-account-api
+                  version:
+                    type: string
+      operationId: getHealth
+      tags:
+        - Operations
+  /healthcheck:
+    get:
+      summary: Read process health
+      security: []
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                  - version
+                properties:
+                  status:
+                    const: UP
+                  service:
+                    const: identity-account-api
+                  version:
+                    type: string
+      operationId: getHealthcheck
+      tags:
+        - Operations
+  /ready:
+    get:
+      summary: Read process health
+      security: []
+      responses:
+        '200':
+          description: Process health
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                  - version
+                properties:
+                  status:
+                    const: UP
+                  service:
+                    const: identity-account-api
+                  version:
+                    type: string
+      operationId: getReady
+      tags:
+        - Operations
+  /metrics:
+    get:
+      summary: Read Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: Prometheus exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+      operationId: getMetrics
+      tags:
+        - Operations
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required:
+            - code
+            - message
+        request_id:
+          type: string
+      required:
+        - error
+    Avatar:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - backgroundColor
+            - foregroundColor
+          properties:
+            kind:
+              type: string
+              enum:
+                - initials
+            backgroundColor:
+              $ref: '#/components/schemas/Color'
+            foregroundColor:
+              $ref: '#/components/schemas/Color'
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - assetId
+            - backgroundColor
+            - foregroundColor
+          properties:
+            kind:
+              type: string
+              enum:
+                - icon
+            assetId:
+              type: string
+              enum:
+                - spark
+                - rocket
+                - heart
+                - leaf
+                - star
+            backgroundColor:
+              $ref: '#/components/schemas/Color'
+            foregroundColor:
+              $ref: '#/components/schemas/Color'
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - assetId
+          properties:
+            kind:
+              type: string
+              enum:
+                - preset
+            assetId:
+              type: string
+              enum:
+                - owl
+                - fox
+                - octopus
+                - robot
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - imageKey
+          properties:
+            kind:
+              type: string
+              enum:
+                - photo
+            imageKey:
+              type: string
+              pattern: ^avatars/[A-Za-z0-9-]+/[A-Za-z0-9-]+\.(jpg|png|webp)$
+    Color:
+      type: string
+      enum:
+        - graphite
+        - tentu
+        - stone
+        - lime
+        - paper
+        - charcoal
+        - cyan
+        - pink
+        - purple
+        - orange
+        - black
+        - white
+    ProfileUpdate:
+      type: object
+      description: Omitted phone or avatar fields preserve their stored values.
+      additionalProperties: false
+      required:
+        - firstName
+        - lastName
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          maxLength: 100
+        phone:
+          type: string
+          pattern: ^(?:\+?[1-9][0-9]{6,14})?$
+          description:
+            Optional phone number, or an empty string to clear it. Omission preserves the existing
+            value.
+        avatar:
+          $ref: '#/components/schemas/Avatar'
+    Account:
+      type: object
+      required:
+        - id
+        - emailVerified
+        - avatar
+        - roles
+        - permissions
+        - capabilities
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        phone:
+          type: string
+        emailVerified:
+          type: boolean
+        createdTimestamp:
+          type: number
+        avatar:
+          $ref: '#/components/schemas/PresentedAvatar'
+        roles:
+          type: array
+          items:
+            type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: object
+          properties:
+            avatarUpload:
+              type: boolean
+              description: Whether private photo storage is configured.
+          required:
+            - avatarUpload
+          additionalProperties: false
+          readOnly: true
+    Sessions:
+      type: object
+      required:
+        - sessions
+      properties:
+        sessions:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - start
+              - lastAccess
+              - current
+            properties:
+              id:
+                type: string
+              start:
+                type: number
+              lastAccess:
+                type: number
+              ipAddress:
+                type: string
+              clients:
+                type: object
+                additionalProperties:
+                  type: string
+              current:
+                type: boolean
+              browser:
+                type: string
+              operatingSystem:
+                type: string
+              device:
+                type: string
+    Upload:
+      type: object
+      required:
+        - key
+        - url
+      properties:
+        key:
+          type: string
+        url:
+          type: string
+          format: uri
+    Security:
+      type: object
+      required:
+        - administrator
+        - passkeys
+        - totp
+        - suggestPasskey
+      properties:
+        administrator:
+          type: boolean
+        suggestPasskey:
+          type: boolean
+        passkeys:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - label
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              createdAt:
+                type: number
+        totp:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - label
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+    Preferences:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum:
+            - light
+            - dark
+      required:
+        - theme
+      additionalProperties: false
+    PreferencesWrite:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum:
+            - light
+            - dark
+      required:
+        - theme
+      additionalProperties: false
+    StepUp:
+      type: object
+      required:
+        - ticket
+        - expiresAt
+      properties:
+        ticket:
+          type: string
+          pattern: ^[A-Za-z0-9_-]{43}$
+        expiresAt:
+          type: integer
+          exclusiveMinimum: 0
+    SecurityEvent:
+      type: object
+      required:
+        - time
+        - type
+      properties:
+        userId:
+          type: string
+        sessionId:
+          type: string
+        clientId:
+          type: string
+        ipAddress:
+          type: string
+        error:
+          type: string
+        browser:
+          type: string
+        operatingSystem:
+          type: string
+        device:
+          type: string
+        time:
+          type: number
+        type:
+          type: string
+    SessionActivity:
+      type: object
+      required:
+        - events
+        - enabled
+        - first
+        - max
+        - applications
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityEvent'
+        enabled:
+          type: boolean
+        first:
+          type: number
+        max:
+          type: number
+        applications:
+          type: array
+          items:
+            type: string
+    PresentedAvatar:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - backgroundColor
+            - foregroundColor
+          properties:
+            kind:
+              type: string
+              enum:
+                - initials
+            backgroundColor:
+              $ref: '#/components/schemas/Color'
+            foregroundColor:
+              $ref: '#/components/schemas/Color'
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - assetId
+            - backgroundColor
+            - foregroundColor
+          properties:
+            kind:
+              type: string
+              enum:
+                - icon
+            assetId:
+              type: string
+              enum:
+                - spark
+                - rocket
+                - heart
+                - leaf
+                - star
+            backgroundColor:
+              $ref: '#/components/schemas/Color'
+            foregroundColor:
+              $ref: '#/components/schemas/Color'
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - assetId
+          properties:
+            kind:
+              type: string
+              enum:
+                - preset
+            assetId:
+              type: string
+              enum:
+                - owl
+                - fox
+                - octopus
+                - robot
+        - type: object
+          additionalProperties: false
+          required:
+            - kind
+            - imageKey
+          properties:
+            kind:
+              type: string
+              enum:
+                - photo
+            imageKey:
+              type: string
+              pattern: ^avatars/[A-Za-z0-9-]+/[A-Za-z0-9-]+\.(jpg|png|webp)$
+            imageUrl:
+              type: string
+              format: uri
+              description: Temporary signed image URL.
+      description:
+        Configured avatar. A photo can additionally include a temporary read URL when private
+        storage is configured.
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Signature-verified SCORETech Identity user access token. Service credentials and
+        caller-supplied subject identifiers cannot select an account.
+tags:
+  - name: Account
+  - name: Operations

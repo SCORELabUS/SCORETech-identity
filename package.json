@@ -1,0 +1,26 @@
+{
+  "name": "scoretech-identity",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@10.9.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lab": "bash ./lab",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm test:tooling",
+    "test:tooling": "node --test tests/unit/*.test.mjs",
+    "lint": "pnpm -r lint",
+    "check": "pnpm build && pnpm typecheck && pnpm lint && pnpm test",
+    "test:e2e": "node tests/e2e/triplet.mjs",
+    "provider:test": "mvn --batch-mode --no-transfer-progress -f provider/providers/email-otp/pom.xml test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "yaml": "2.8.1",
+    "prettier": "3.4.2"
+  }
+}
