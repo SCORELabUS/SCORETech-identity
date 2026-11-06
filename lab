@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+command -v docker >/dev/null || { printf 'Docker with Compose v2 is required.\n' >&2; exit 1; }
+docker compose version >/dev/null
+compose() { docker compose --project-directory "$ROOT" -f "$ROOT/deploy/local/compose.yaml" "$@"; }
+trap 'printf "SCORETech Identity command failed at line %s. Inspect: ./lab logs\n" "$LINENO" >&2' ERR
+case "${1:-up}" in
+ up)
+  docker info >/dev/null
+  compose build prepare
+  compose build keycloak account-api gateway
+  compose run --rm prepare
+  compose up -d --wait --wait-timeout 240
+  printf '\nSCORETech Identity is ready:\n  Account: http://localhost:%s/identity/account/\n  Admin:   http://localhost:%s/identity/admin/\n  Inbox:   http://localhost:18025\n\nUse admin-score@example.invalid, support@example.invalid or person@example.invalid.\nSign-in codes are captured in Inbox. Administrators must create a passkey.\n' "${IDENTITY_LAB_PORT:-18000}" "${IDENTITY_LAB_PORT:-18000}"
+  ;;
+ down) compose down ;;
+ logs) compose logs --tail=120 "${@:2}" ;;
+ status) compose ps ;;
+ check) compose run --rm checks ;;
+ *) printf 'Usage: ./lab [up|down|status|logs [service]|check]\n' >&2; exit 2 ;;
+esac

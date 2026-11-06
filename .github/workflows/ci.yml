@@ -1,0 +1,37 @@
+name: Identity laboratory
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec playwright install --with-deps chromium
+      # The provider Docker build includes its Java regression suite.
+      - run: ./lab up
+      - run: ./lab check
+      - run: pnpm test:e2e
+        env:
+          IDENTITY_E2E_CHROMIUM: '1'
+      - if: always()
+        run: ./lab logs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-browser-checks
+          path: test-results/
+          if-no-files-found: ignore
+      - if: always()
+        run: ./lab down
