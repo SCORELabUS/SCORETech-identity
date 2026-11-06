@@ -1,0 +1,147 @@
+{
+  "realm": "score",
+  "enabled": true,
+  "displayName": "SCORETech Identity",
+  "accessTokenLifespan": 300,
+  "adminEventsDetailsEnabled": false,
+  "adminEventsEnabled": true,
+  "browserFlow": "tentu-passwordless-browser-v2",
+  "bruteForceProtected": true,
+  "clientSessionIdleTimeout": 0,
+  "clientSessionMaxLifespan": 0,
+  "defaultLocale": "en",
+  "duplicateEmailsAllowed": false,
+  "emailTheme": "score",
+  "eventsEnabled": true,
+  "eventsListeners": [
+    "tentu-security-events"
+  ],
+  "failureFactor": 5,
+  "internationalizationEnabled": true,
+  "loginTheme": "score",
+  "loginWithEmailAllowed": true,
+  "maxFailureWaitSeconds": 900,
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyCodeReusable": false,
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "otpPolicyType": "totp",
+  "registrationAllowed": true,
+  "rememberMe": true,
+  "resetPasswordAllowed": false,
+  "revokeRefreshToken": true,
+  "ssoSessionIdleTimeout": 43200,
+  "ssoSessionIdleTimeoutRememberMe": 2592000,
+  "ssoSessionMaxLifespan": 604800,
+  "ssoSessionMaxLifespanRememberMe": 7776000,
+  "supportedLocales": [
+    "en"
+  ],
+  "verifyEmail": true,
+  "waitIncrementSeconds": 60,
+  "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": true,
+  "webAuthnPolicyPasswordlessRpEntityName": "SCORETech Identity",
+  "webAuthnPolicyPasswordlessRpId": "localhost",
+  "webAuthnPolicyPasswordlessSignatureAlgorithms": [
+    "ES256",
+    "RS256"
+  ],
+  "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+  "roles": {
+    "realm": []
+  },
+  "groups": [],
+  "clients": [],
+  "users": [],
+  "authenticationFlows": [
+    {
+      "alias": "tentu-passwordless-browser-v2",
+      "authenticationExecutions": [
+        {
+          "authenticator": "tentu-email-otp",
+          "authenticatorFlow": false,
+          "priority": 10,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        }
+      ],
+      "builtIn": false,
+      "description": "Native SSO and credentials, server-enforced administrative passkeys.",
+      "providerId": "basic-flow",
+      "topLevel": true
+    }
+  ],
+  "requiredActions": [
+    {
+      "alias": "tentu-register-passkey",
+      "defaultAction": false,
+      "enabled": true,
+      "name": "Crear clave de acceso",
+      "providerId": "tentu-register-passkey"
+    },
+    {
+      "alias": "webauthn-register",
+      "defaultAction": false,
+      "enabled": false,
+      "name": "Legacy WebAuthn second factor",
+      "providerId": "webauthn-register"
+    },
+    {
+      "alias": "webauthn-register-passwordless",
+      "defaultAction": false,
+      "enabled": false,
+      "name": "Native passwordless registration (wrapped)",
+      "providerId": "webauthn-register-passwordless"
+    },
+    {
+      "alias": "CONFIGURE_TOTP",
+      "config": {
+        "max_auth_age": "0"
+      },
+      "defaultAction": false,
+      "enabled": true,
+      "name": "App de autenticaci\u00f3n",
+      "providerId": "CONFIGURE_TOTP"
+    },
+    {
+      "alias": "UPDATE_EMAIL",
+      "config": {
+        "max_auth_age": "0",
+        "verifyEmail": "true"
+      },
+      "defaultAction": false,
+      "enabled": true,
+      "name": "Cambiar correo",
+      "providerId": "UPDATE_EMAIL"
+    },
+    {
+      "alias": "delete_credential",
+      "defaultAction": false,
+      "enabled": false,
+      "name": "Native deletion (wrapped)",
+      "providerId": "delete_credential"
+    },
+    {
+      "alias": "tentu-delete-credential",
+      "defaultAction": false,
+      "enabled": true,
+      "name": "Eliminar m\u00e9todo de acceso",
+      "providerId": "tentu-delete-credential"
+    }
+  ],
+  "sslRequired": "none",
+  "smtpServer": {
+    "host": "mail",
+    "port": "1025",
+    "from": "no-reply@example.invalid",
+    "auth": "false",
+    "starttls": "false",
+    "ssl": "false"
+  },
+  "webAuthnPolicyPasswordlessResidentKey": "required",
+  "attributes": {
+    "tentu.invitations.enabled": "true",
+    "tentu.step-up.enabled": "true"
+  }
+}

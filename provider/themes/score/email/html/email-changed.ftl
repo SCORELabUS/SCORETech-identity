@@ -1,0 +1,1 @@
+<#import "template.ftl" as layout><@layout.emailLayout><h1>Your email address has changed</h1><p>A new email address was confirmed for your SCORETech Identity. Your account and service connections are unchanged.</p><p>If you did not request this change, contact SCORETech Identity support immediately.</p></@layout.emailLayout>

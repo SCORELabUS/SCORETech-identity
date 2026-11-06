@@ -1,0 +1,10 @@
+es.tentuplaza.identity.emailotp.SupportResourceFactory
+es.tentuplaza.identity.emailotp.AuthorizationResourceFactory
+es.tentuplaza.identity.emailotp.InvitationResourceFactory
+es.tentuplaza.identity.emailotp.StepUpResourceFactory
+
+es.tentuplaza.identity.emailotp.UserMutationResourceFactory
+
+es.tentuplaza.identity.emailotp.RecoveryResourceFactory
+
+es.tentuplaza.identity.emailotp.ApplicationsResourceFactory
