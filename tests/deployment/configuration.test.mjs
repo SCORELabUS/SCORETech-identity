@@ -108,7 +108,6 @@ test(
         );
       }
       assert.equal(model.services.gateway.ports[0].host_ip, "127.0.0.1");
-      assert.equal(model.services.keycloak.build.context, root);
       for (const service of Object.values(model.services)) {
         for (const volume of service.volumes || []) {
           assert.ok(
@@ -118,6 +117,7 @@ test(
         }
       }
       if (environment === "development") {
+        assert.equal(model.services.keycloak.build.context, root);
         assert.equal(
           model.services.keycloak.depends_on.prepare.condition,
           "service_completed_successfully",
@@ -132,6 +132,34 @@ test(
         );
         continue;
       }
+      const images = {
+        render: "tooling",
+        "realm-setup": "tooling",
+        "catalogue-seed": "tooling",
+        "config-sync": "tooling",
+        keycloak: "provider",
+        "account-api": "account",
+        "admin-api": "admin",
+        gateway: "gateway",
+      };
+      for (const [service, suffix] of Object.entries(images)) {
+        assert.equal(
+          model.services[service].build,
+          undefined,
+          "Production never needs a source build",
+        );
+        assert.equal(model.services[service].pull_policy, "always");
+        assert.equal(
+          model.services[service].image,
+          `ghcr.io/scorelabus/scoretech-identity-${suffix}:main`,
+        );
+      }
+      assert.ok(
+        !model.services.gateway.volumes.some(
+          (v) => v.target === "/etc/nginx/conf.d/default.conf",
+        ),
+        "Gateway configuration travels with its versioned image",
+      );
       assert.equal(
         model.services.keycloak.depends_on.render.condition,
         "service_completed_successfully",

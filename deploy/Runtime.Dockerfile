@@ -15,6 +15,10 @@ ENV NODE_ENV=production
 RUN mkdir -p /var/lib/identity-avatars && chown node:node /var/lib/identity-avatars
 USER node
 CMD ["node", "apps/account-api/dist/main/main.js"]
+FROM api AS account
+CMD ["node", "apps/account-api/dist/main/main.js"]
+FROM api AS admin
+CMD ["node", "apps/admin-api/dist/main/main.js"]
 FROM workspace AS tooling
 CMD ["node", "tooling/prepare-lab.mjs"]
 FROM workspace AS production-tooling
@@ -26,3 +30,5 @@ FROM nginx:1.28.0-alpine AS web
 COPY --from=workspace /app/apps/account-web/dist /usr/share/nginx/html/account
 COPY --from=workspace /app/apps/admin-web/dist /usr/share/nginx/html/admin
 COPY deploy/local/nginx.conf /etc/nginx/conf.d/default.conf
+FROM web AS production-web
+COPY deploy/production/nginx.conf /etc/nginx/conf.d/default.conf

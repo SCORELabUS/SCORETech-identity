@@ -19,8 +19,8 @@ x-github-env: &github-env
 services:
   render:
     user: '0:0'
-    image: scoretech-identity-production-tooling:${IDENTITY_VERSION:-local}
-    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: production-tooling}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
     command: [node, tooling/render-production.mjs]
     environment:
       IDENTITY_RUNTIME_DIR: /runtime
@@ -51,8 +51,8 @@ services:
     volumes: [identity-database:/var/lib/postgresql]
     healthcheck: {test: [CMD-SHELL, pg_isready -U keycloak -d keycloak], interval: 5s, retries: 30}
   keycloak:
-    image: scoretech-identity-provider:${IDENTITY_VERSION:-local}
-    build: {context: ., dockerfile: provider/Dockerfile}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-provider:${IDENTITY_VERSION:-main}
+    pull_policy: always
     restart: unless-stopped
     mem_limit: ${IDENTITY_PROVIDER_MEMORY:-2g}
     environment:
@@ -77,7 +77,8 @@ services:
       retries: 40
       start_period: 30s
   realm-setup:
-    image: scoretech-identity-production-tooling:${IDENTITY_VERSION:-local}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
     command: [node, tooling/configure-realm.mjs]
     environment:
       <<: *api-env
@@ -91,7 +92,8 @@ services:
       - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/coordination:/runtime/coordination
     depends_on: {keycloak: {condition: service_healthy}}
   catalogue-seed:
-    image: scoretech-identity-production-tooling:${IDENTITY_VERSION:-local}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
     command: [node, tooling/seed-catalogue.mjs]
     environment:
       <<: [*api-env, *github-env]
@@ -101,7 +103,8 @@ services:
     volumes: ['${IDENTITY_RUNTIME_PATH:-./.identity-runtime}:/runtime:ro']
     depends_on: {render: {condition: service_completed_successfully}}
   config-sync:
-    image: scoretech-identity-production-tooling:${IDENTITY_VERSION:-local}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
     restart: unless-stopped
     command: [node, tooling/sync-catalogue.mjs, --watch]
     environment:
@@ -117,8 +120,8 @@ services:
     depends_on: {realm-setup: {condition: service_completed_successfully}, catalogue-seed: {condition: service_completed_successfully}}
     healthcheck: {test: [CMD, node, -e, "const fs=require('fs');try{process.exit(JSON.parse(fs.readFileSync('/runtime/catalogue/apply-status.json')).state==='applied'?0:1)}catch{process.exit(1)}"], interval: 10s, retries: 30}
   account-api:
-    image: scoretech-identity-api:${IDENTITY_VERSION:-local}
-    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: api}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-account:${IDENTITY_VERSION:-main}
+    pull_policy: always
     restart: unless-stopped
     command: [node, apps/account-api/dist/main/main.js]
     environment:
@@ -131,7 +134,8 @@ services:
     depends_on: {config-sync: {condition: service_healthy}}
     healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, retries: 20}
   admin-api:
-    image: scoretech-identity-api:${IDENTITY_VERSION:-local}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-admin:${IDENTITY_VERSION:-main}
+    pull_policy: always
     restart: unless-stopped
     command: [node, apps/admin-api/dist/main/main.js]
     environment:
@@ -146,8 +150,8 @@ services:
     depends_on: {config-sync: {condition: service_healthy}}
     healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, retries: 20}
   gateway:
-    image: scoretech-identity-web:${IDENTITY_VERSION:-local}
-    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: web}
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-gateway:${IDENTITY_VERSION:-main}
+    pull_policy: always
     restart: unless-stopped
     ports: ['127.0.0.1:${IDENTITY_GATEWAY_PORT:-18010}:8080']
     networks:
@@ -156,7 +160,6 @@ services:
         aliases: ['${IDENTITY_GATEWAY_ALIAS:-scoretech-identity-gateway}']
     volumes:
       - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/web:/runtime/web:ro
-      - ./deploy/production/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on: {account-api: {condition: service_healthy}, admin-api: {condition: service_healthy}}
     healthcheck: {test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/identity/account/], interval: 5s, retries: 20}
 # Compose materializes these .env values as files only for the services that need them.
