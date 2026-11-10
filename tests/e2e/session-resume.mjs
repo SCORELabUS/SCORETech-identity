@@ -96,9 +96,11 @@ async function code(email, page) {
   throw Error("No captured sign-in code for fixture.");
 }
 
+let activePage;
 try {
   fixture("create", adminEmail);
   const page = await attach(context);
+  activePage = page;
   await page.goto(origin + "/identity/admin/");
   await page
     .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
@@ -125,6 +127,7 @@ try {
   ).toHaveCount(0);
   // A fresh client tab has no console token; it must reuse the existing SSO cookie.
   const admin = await attach(context);
+  activePage = admin;
   await admin.goto(origin + "/identity/admin/#users");
   await expect(
     admin.getByRole("heading", {
@@ -221,6 +224,23 @@ try {
   console.log(
     "Session recovery: cross-console SSO, focus refresh, rejected refresh recovery and anonymous fallback passed.",
   );
+} catch (error) {
+  if (activePage) {
+    await activePage
+      .screenshot({ path: artifacts + "/failure.png" })
+      .catch(() => {});
+    console.error(
+      "Session test stopped at",
+      new URL(activePage.url()).pathname,
+    );
+    console.error(
+      await activePage
+        .locator("body")
+        .innerText()
+        .catch(() => "Page unavailable"),
+    );
+  }
+  throw error;
 } finally {
   await browser.close();
   fixture("delete", adminEmail);
