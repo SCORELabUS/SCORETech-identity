@@ -1,0 +1,10 @@
+services:
+  render:
+    environment:
+      BREVO_EMAIL_TRANSPORT: api
+  keycloak:
+    environment:
+      BREVO_API_KEY_FILE: /run/secrets/brevo_api_key
+    secrets: [brevo_api_key]
+secrets:
+  brevo_api_key: {environment: BREVO_API_KEY}

@@ -287,7 +287,15 @@ that this project has configured a UMA resource server.
 
 ## Brevo transactional email
 
-Production rendering configures Keycloak's native SMTP connection to
+Set `BREVO_EMAIL_TRANSPORT=api` and a transactional `BREVO_API_KEY` in the
+private production or staging `.env` to send Keycloak's rendered messages over
+HTTPS to `api.brevo.com:443`. Compose mounts the key only in Keycloak. The SMTP
+login, key and port are optional in API mode. Set `BREVO_SENDER_EMAIL` to a
+sender authorized in the Brevo account and run the normal Compose update to apply
+the new transport to an existing deployment.
+
+With the default `BREVO_EMAIL_TRANSPORT=smtp`, production rendering configures
+Keycloak's native SMTP connection to
 `smtp-relay.brevo.com:587` with STARTTLS by default, using the private
 `BREVO_SMTP_LOGIN` and `BREVO_SMTP_KEY` values mounted as secrets.
 `BREVO_SMTP_PORT` also accepts 2525 (STARTTLS) and 465 (implicit TLS). Set the

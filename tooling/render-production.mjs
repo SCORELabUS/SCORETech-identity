@@ -37,6 +37,33 @@ function email(value, name) {
     throw new Error(`${name} must be a valid configured email address.`);
   return value;
 }
+async function emailConfiguration(env) {
+  const sender = {
+    from: email(required(env, "BREVO_SENDER_EMAIL"), "BREVO_SENDER_EMAIL"),
+    fromDisplayName: env.BREVO_SENDER_NAME?.trim() || "SCORETech Identity",
+  };
+  const transport = env.BREVO_EMAIL_TRANSPORT?.trim() || "smtp";
+  if (transport === "api") return sender;
+  if (transport !== "smtp")
+    throw new Error("BREVO_EMAIL_TRANSPORT must be smtp or api.");
+  const port = env.BREVO_SMTP_PORT?.trim() || "587";
+  if (!["587", "2525", "465"].includes(port))
+    throw new Error("BREVO_SMTP_PORT must be 587, 2525 or 465.");
+  const [user, password] = await Promise.all([
+    readSecret(env, "BREVO_SMTP_LOGIN_FILE"),
+    readSecret(env, "BREVO_SMTP_KEY_FILE"),
+  ]);
+  return {
+    ...sender,
+    host: "smtp-relay.brevo.com",
+    port,
+    user,
+    password,
+    auth: "true",
+    ssl: port === "465" ? "true" : "false",
+    starttls: port === "465" ? "false" : "true",
+  };
+}
 /** Render deployment inputs only. This never connects to Keycloak, GitHub, Brevo or the published documents. */
 export async function renderProduction(env = process.env) {
   required(env, "IDENTITY_PUBLIC_ORIGIN");
@@ -63,20 +90,12 @@ export async function renderProduction(env = process.env) {
     required(env, "IDENTITY_BOOTSTRAP_EMAIL"),
     "IDENTITY_BOOTSTRAP_EMAIL",
   );
-  const sender = email(
-    required(env, "BREVO_SENDER_EMAIL"),
-    "BREVO_SENDER_EMAIL",
-  );
-  const smtpPort = env.BREVO_SMTP_PORT?.trim() || "587";
-  if (!["587", "2525", "465"].includes(smtpPort))
-    throw new Error("BREVO_SMTP_PORT must be 587, 2525 or 465.");
   const legalDocuments = legalReferences(c.origin);
-  const [admin, account, sync, smtpLogin, smtpKey] = await Promise.all([
+  const [admin, account, sync, smtp] = await Promise.all([
     readSecret(env, "IDENTITY_ADMIN_SECRET_FILE"),
     readSecret(env, "IDENTITY_ACCOUNT_SECRET_FILE"),
     readSecret(env, "IDENTITY_SYNC_SECRET_FILE"),
-    readSecret(env, "BREVO_SMTP_LOGIN_FILE"),
-    readSecret(env, "BREVO_SMTP_KEY_FILE"),
+    emailConfiguration(env),
   ]);
   if (new Set([admin, account, sync]).size !== 3)
     throw new Error("Identity service clients require distinct credentials.");
@@ -91,17 +110,7 @@ export async function renderProduction(env = process.env) {
     config: c,
     identityProviders: await loadExternalSso(runtime),
     serviceSecrets: { admin, account, sync },
-    smtp: {
-      host: "smtp-relay.brevo.com",
-      port: smtpPort,
-      from: sender,
-      fromDisplayName: env.BREVO_SENDER_NAME?.trim() || "SCORETech Identity",
-      user: smtpLogin,
-      password: smtpKey,
-      auth: "true",
-      ssl: smtpPort === "465" ? "true" : "false",
-      starttls: smtpPort === "465" ? "false" : "true",
-    },
+    smtp,
     legalDocuments,
     // The first operator proves their email through OTP and enrols a passkey in the normal flow.
     // No password, verified-email claim or existing credential is fabricated here.

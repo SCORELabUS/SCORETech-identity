@@ -1,0 +1,10 @@
+services:
+  render:
+    environment:
+      BREVO_SMTP_LOGIN_FILE: /run/secrets/smtp_login
+      BREVO_SMTP_KEY_FILE: /run/secrets/smtp_key
+      BREVO_SMTP_PORT: ${BREVO_SMTP_PORT:-587}
+    secrets: [smtp_login, smtp_key]
+secrets:
+  smtp_login: {environment: BREVO_SMTP_LOGIN}
+  smtp_key: {environment: BREVO_SMTP_KEY}

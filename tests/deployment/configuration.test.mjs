@@ -190,6 +190,52 @@ test(
       assert.equal(model.services.render.environment.BREVO_SMTP_PORT, "587");
       assert.equal(model.services.render.profiles, undefined);
       assert.equal(model.services["catalogue-init"].profiles, undefined);
+
+      const apiEnvFile = path.join(directory, `${environment}-brevo-api.env`);
+      await writeFile(
+        apiEnvFile,
+        env.replace(/^BREVO_EMAIL_TRANSPORT=.*$/m, "BREVO_EMAIL_TRANSPORT=api"),
+      );
+      const api = JSON.parse(
+        execFileSync(
+          "docker",
+          [
+            "compose",
+            "--env-file",
+            apiEnvFile,
+            "-f",
+            path.join(root, `docker/${environment}/compose.yaml`),
+            "config",
+            "--format",
+            "json",
+          ],
+          { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+        ),
+      );
+      assert.equal(
+        api.services.render.environment.BREVO_EMAIL_TRANSPORT,
+        "api",
+      );
+      assert.equal(
+        api.services.keycloak.environment.BREVO_API_KEY_FILE,
+        "/run/secrets/brevo_api_key",
+      );
+      assert.deepEqual(api.secrets.brevo_api_key, {
+        name: `${api.name}_brevo_api_key`,
+        environment: "BREVO_API_KEY",
+      });
+      assert.deepEqual(
+        Object.entries(api.services)
+          .filter(([, service]) =>
+            service.secrets?.some(
+              (secret) => secret.source === "brevo_api_key",
+            ),
+          )
+          .map(([name]) => name),
+        ["keycloak"],
+      );
+      assert.equal(api.secrets.smtp_key, undefined);
+      assert.equal(api.secrets.smtp_login, undefined);
     }
     assert.equal(
       models.production.volumes["identity-database"].name,
