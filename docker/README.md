@@ -67,7 +67,7 @@ In GitHub, allow GitHub Actions to publish repository packages under the
 organization's policies. The workflow requests the required token permissions.
 After the first publication, choose public visibility for each package if anonymous
 pulls are wanted. Public source code does not automatically make GHCR packages
-public. Otherwise log in on the server using a GitHub account/token with
+public. Otherwise log in on the server using a GitHub account and personal access token (classic) with
 `read:packages` and access to these packages:
 
 ```bash

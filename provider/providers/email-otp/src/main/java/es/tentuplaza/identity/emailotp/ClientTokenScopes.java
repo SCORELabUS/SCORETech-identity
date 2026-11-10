@@ -65,6 +65,16 @@ final class ClientTokenScopes {
         && (desired.contains(role.getName()) || TECHNICAL.contains(role.getName()));
   }
 
+  // Account linking owns this direct native scope independently of the realm
+  // permission catalogue. Preserve it without claiming it as a managed atom or
+  // allowing broader client roles, composite grants or other consumers.
+  private static boolean nativeAccountLink(RealmModel realm, String clientId, RoleModel role) {
+    if (!"identity-account-web".equals(clientId) || role == null || !role.isClientRole()
+        || role.isComposite() || !"manage-account-links".equals(role.getName())) return false;
+    var account = realm.getClientByClientId("account");
+    return account != null && account.getId() != null && account.getId().equals(role.getContainerId());
+  }
+
   /** Rule-managed scopes must remain removable without claiming manual grants. */
   static void preflightRuleClient(ClientModel client) {
     if (client == null) throw conflict("Access rules require a dedicated existing client.");
@@ -123,7 +133,8 @@ final class ClientTokenScopes {
             existing.add(role.getName());
           }
         } else {
-          if (!allowed(role, desired)) throw conflict("Unmanaged client scope mapping widens token permissions");
+          if (!allowed(role, desired) && !nativeAccountLink(realm, scope.clientId, role))
+            throw conflict("Unmanaged client scope mapping widens token permissions");
           existing.add(role.getName());
         }
       }

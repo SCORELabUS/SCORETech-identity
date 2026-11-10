@@ -193,6 +193,55 @@ class ClientTokenScopesTest {
     }
   }
 
+  static RoleModel nativeLinks(Fixture fixture, String name) {
+    var account = mock(ClientModel.class);
+    when(account.getId()).thenReturn("native-account-id");
+    when(fixture.realm.getClientByClientId("account")).thenReturn(account);
+    when(fixture.realm.getClientByClientId("identity-account-web")).thenReturn(fixture.client);
+    var links = role(name);
+    when(links.isClientRole()).thenReturn(true);
+    when(links.getContainerId()).thenReturn("native-account-id");
+    return links;
+  }
+
+  @Test void preservesOnlyTheDirectNativeAccountLinkScopeOnAccountWeb() {
+    var fixture = new Fixture();
+    var links = nativeLinks(fixture, "manage-account-links");
+    fixture.direct.add(links);
+    fixture.apply(scope("identity-account-web"));
+    fixture.apply(scope("identity-account-web"));
+    assertFalse(fixture.fullScope.get());
+    assertEquals(Set.of(links), fixture.direct);
+    assertEquals("[]", fixture.attributes.get(ClientTokenScopes.OWNED));
+    verify(fixture.client, never()).deleteScopeMapping(links);
+  }
+
+  @Test void rejectsBroaderOrImpersonatedNativeScopesAndOtherConsumers() {
+    for (String kind : List.of("other-consumer", "manage-account", "view-profile", "wrong-container", "composite", "missing-native-client")) {
+      var fixture = new Fixture();
+      var links = nativeLinks(fixture, Set.of("manage-account", "view-profile").contains(kind) ? kind : "manage-account-links");
+      if (kind.equals("wrong-container")) when(links.getContainerId()).thenReturn("another-client");
+      if (kind.equals("composite")) when(links.isComposite()).thenReturn(true);
+      if (kind.equals("missing-native-client")) when(fixture.realm.getClientByClientId("account")).thenReturn(null);
+      fixture.direct.add(links);
+      assertThrows(ClientErrorException.class, () -> fixture.apply(scope(kind.equals("other-consumer") ? "analytics-web" : "identity-account-web")));
+      verify(fixture.client, never()).setFullScopeAllowed(anyBoolean());
+      verify(fixture.client, never()).deleteScopeMapping(any(RoleModel.class));
+    }
+  }
+
+  @Test void keepsLinkedScopesAndAccessRuleClientsStrictDespiteNativeLinkScope() {
+    for (boolean defaults : List.of(true, false)) {
+      var fixture = new Fixture();
+      var links = nativeLinks(fixture, "manage-account-links");
+      fixture.linked(defaults, links);
+      assertThrows(ClientErrorException.class, () -> fixture.apply(scope("identity-account-web")));
+    }
+    var fixture = new Fixture();
+    fixture.direct.add(nativeLinks(fixture, "manage-account-links"));
+    assertThrows(ClientErrorException.class, () -> ClientTokenScopes.preflightRuleClient(fixture.client));
+  }
+
   @Test void rejectsWideningFromBothDefaultAndOptionalLinkedScopes() {
     for (boolean defaults : List.of(true, false)) {
       var fixture = new Fixture(); fixture.linked(defaults, role("identity:users:delete"));
