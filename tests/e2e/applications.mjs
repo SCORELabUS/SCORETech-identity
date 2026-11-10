@@ -550,6 +550,9 @@ export async function verifyApplications({
     await admin.setViewportSize({ width: 390, height: 844 });
     await admin.reload();
     await admin
+      .getByLabel("Search applications", { exact: true })
+      .fill(String(run));
+    await admin
       .getByRole("button", {
         name: "Edit application " + browserApp.application.name,
         exact: true,
@@ -569,6 +572,9 @@ export async function verifyApplications({
     });
     await admin.setViewportSize(viewport);
     await admin.reload();
+    await admin
+      .getByLabel("Search applications", { exact: true })
+      .fill(String(run));
     await admin
       .getByRole("button", {
         name: "Edit application " + browserApp.application.name,

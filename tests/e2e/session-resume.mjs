@@ -15,7 +15,7 @@ const compose = [
   root + "deploy/local/compose.yaml",
   "exec",
   "-T",
-  "catalogue-fixture",
+  "account-api",
   "node",
   "--input-type=module",
   "-e",

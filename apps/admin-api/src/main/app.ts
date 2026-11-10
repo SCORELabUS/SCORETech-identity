@@ -169,7 +169,7 @@ export const createApp = (config: AppConfig, dependencies: AppDependencies = {})
     }),
   );
   app.use('/v1/invitations', createInvitationsRouter(config, logger));
-  app.use('/v1', createIdentityRouter(identityClient, logger, config));
+  app.use('/v1', createIdentityRouter(identityClient, logger, config, () => catalogue.activeRegistry()));
   app.use((_request, response) =>
     response.status(404).json({ error: { code: 'not_found', message: 'Resource not found.' } }),
   );

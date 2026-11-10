@@ -8,8 +8,7 @@ import type { Logger } from '../../shared/logging/logger.js';
 import type { Principal } from '../auth/oidc-authenticator.js';
 import type { AppConfig } from '../../config/app-config.js';
 import type { IdentityAdminClient } from './types.js';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { ProviderCatalogueClient } from '@scoretech/identity-internal';
 
 const UserIdSchema = z.string().uuid();
 const QueryBoolean = z
@@ -77,21 +76,29 @@ const ActiveRegistrySchema = z.object({
 });
 type ActiveRegistry = z.infer<typeof ActiveRegistrySchema>;
 
-const loadActiveRegistry = (config: AppConfig | undefined): ActiveRegistry => {
-  try {
-    if (!config) throw new Error('Missing catalogue configuration.');
-    const file = join(dirname(config.APP_AUTHORIZATION_CATALOGUE_PATH), 'active-registry.json');
-    const registry = ActiveRegistrySchema.parse(JSON.parse(readFileSync(file, 'utf8')));
-    if (registry.environment !== config.APP_IDENTITY_ENVIRONMENT)
-      throw new Error('Catalogue environment mismatch.');
-    return registry;
-  } catch {
+const catalogueClients = new WeakMap<AppConfig, ProviderCatalogueClient>();
+const loadActiveRegistry = async (config: AppConfig | undefined): Promise<ActiveRegistry> => {
+  if (!config)
+    throw new HttpError(503, 'catalogue_unavailable', 'Catalogue configuration is missing.');
+  let client = catalogueClients.get(config);
+  if (!client) {
+    client = new ProviderCatalogueClient(config);
+    catalogueClients.set(config, client);
+  }
+  const state = z
+    .object({
+      registry: ActiveRegistrySchema,
+      catalogue: z.object({ roles: z.array(z.object({ name: z.string() })) }),
+    })
+    .parse(await client.request());
+  if (state.registry.environment !== config.APP_IDENTITY_ENVIRONMENT)
     throw new HttpError(
       503,
       'catalogue_unavailable',
-      'The applied authorization catalogue is unavailable.',
+      'The stored catalogue belongs to another environment.',
     );
-  }
+  const roles = new Set(state.catalogue.roles.map((role) => role.name));
+  return { ...state.registry, roles: state.registry.roles.filter((role) => roles.has(role.name)) };
 };
 
 const rolePermissions = (registry: ActiveRegistry, requested: readonly string[]): Set<string> => {
@@ -162,8 +169,10 @@ export const createIdentityRouter = (
   client: IdentityAdminClient,
   logger: Logger,
   config?: AppConfig,
+  registryLoader?: () => Promise<ActiveRegistry>,
 ): Router => {
   const router = Router();
+  const registry = registryLoader ?? (() => loadActiveRegistry(config));
   router.use(authorizeIdentityOperation);
   const currentPrincipal = async (principal: Principal): Promise<Principal> => {
     const user = await client.getUser(principal.subject);
@@ -433,7 +442,7 @@ export const createIdentityRouter = (
     asyncHandler(async (request, response) => {
       const input = CreateUserSchema.parse(request.body);
       const { sendVerifyEmail, ...user } = input;
-      if (rolePermissions(loadActiveRegistry(config), ['member']).size > 0)
+      if (rolePermissions(await registry(), ['member']).size > 0)
         throw new HttpError(
           409,
           'privileged_member_role',
@@ -522,7 +531,7 @@ export const createIdentityRouter = (
       assertRoleDelegation(
         current,
         removedAdministrator ? [...roles, 'administrador'] : roles,
-        loadActiveRegistry(config),
+        await registry(),
       );
       await client.replaceManagedRealmRoles(userId, roles);
       audit(logger, response, 'user.roles_replaced', userId, { roles });
@@ -543,7 +552,7 @@ export const createIdentityRouter = (
         );
       }
       const current = await currentPrincipal(principal);
-      assertRoleDelegation(current, [...addRoles, ...removeRoles], loadActiveRegistry(config));
+      assertRoleDelegation(current, [...addRoles, ...removeRoles], await registry());
 
       const managedRoles = await client.listRealmRoles();
       const managedNames = new Set(managedRoles.map((role) => role.name));

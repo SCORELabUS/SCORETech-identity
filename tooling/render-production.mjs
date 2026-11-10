@@ -1,3 +1,4 @@
+import { legalReferences } from "./legal-documents.mjs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,37 +37,6 @@ function email(value, name) {
     throw new Error(`${name} must be a valid configured email address.`);
   return value;
 }
-function legalDocument(env, kind) {
-  const prefix = `IDENTITY_${kind.toUpperCase()}_`;
-  const reference = Object.fromEntries(
-    ["url", "version", "digest"].map((field) => [
-      field,
-      required(env, prefix + field.toUpperCase()),
-    ]),
-  );
-  let url;
-  try {
-    url = new URL(reference.url);
-  } catch {
-    throw new Error(`${prefix}URL must be a published HTTPS URL.`);
-  }
-  if (
-    url.protocol !== "https:" ||
-    !url.hostname ||
-    url.username ||
-    url.password ||
-    url.hash
-  )
-    throw new Error(
-      `${prefix}URL must be a published HTTPS URL without credentials or fragments.`,
-    );
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(reference.version))
-    throw new Error(`${prefix}VERSION is invalid.`);
-  if (!/^sha256:[a-f0-9]{64}$/.test(reference.digest))
-    throw new Error(`${prefix}DIGEST must be an explicit sha256 reference.`);
-  return reference;
-}
-
 /** Render deployment inputs only. This never connects to Keycloak, GitHub, Brevo or the published documents. */
 export async function renderProduction(env = process.env) {
   required(env, "IDENTITY_PUBLIC_ORIGIN");
@@ -97,10 +67,7 @@ export async function renderProduction(env = process.env) {
     required(env, "BREVO_SENDER_EMAIL"),
     "BREVO_SENDER_EMAIL",
   );
-  const legalDocuments = {
-    terms: legalDocument(env, "terms"),
-    privacy: legalDocument(env, "privacy"),
-  };
+  const legalDocuments = legalReferences(c.origin);
   const [admin, account, sync, smtpLogin, smtpKey] = await Promise.all([
     readSecret(env, "IDENTITY_ADMIN_SECRET_FILE"),
     readSecret(env, "IDENTITY_ACCOUNT_SECRET_FILE"),

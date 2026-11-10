@@ -10,3 +10,5 @@ es.tentuplaza.identity.emailotp.RecoveryResourceFactory
 es.tentuplaza.identity.emailotp.ApplicationsResourceFactory
 
 es.tentuplaza.identity.emailotp.IdentityLinksResourceFactory
+
+es.tentuplaza.identity.emailotp.CatalogueResourceFactory

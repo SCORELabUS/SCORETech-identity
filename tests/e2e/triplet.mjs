@@ -7,7 +7,7 @@ import { verifyAccessPolicy } from "./access-policy.mjs";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 const root = new URL("../../", import.meta.url).pathname;
 const origin = process.env.IDENTITY_E2E_ORIGIN || "http://localhost:18000";
 if (
@@ -36,7 +36,7 @@ const compose = [
   root + "deploy/local/compose.yaml",
   "exec",
   "-T",
-  "catalogue-fixture",
+  "account-api",
   "node",
   "--input-type=module",
   "-e",
@@ -212,18 +212,28 @@ function authenticatorCode(secret) {
     .padStart(6, "0");
 }
 async function applied(revision) {
-  for (let attempt = 0; attempt < 60; attempt++) {
-    const state = JSON.parse(
-      await readFile(root + ".lab/catalogue/apply-status.json", "utf8"),
-    );
-    if (state.state === "applied" && state.observedRevision === revision)
-      return;
-    if (state.state === "failed")
-      throw Error("Provider catalogue verification failed: " + state.detail);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw Error("The published revision was not applied.");
+  await expect
+    .poll(
+      () =>
+        admin.evaluate(async () => {
+          const c = window.__SCORE_CONFIG__;
+          const user = JSON.parse(
+            sessionStorage.getItem(`score.user.user:${c.issuer}:${c.clientId}`),
+          );
+          const response = await fetch(
+            c.adminApiUrl + "/catalogue/environments",
+            { headers: { Authorization: "Bearer " + user.access_token } },
+          );
+          if (!response.ok)
+            throw new Error("Unable to verify the database catalogue.");
+          const state = (await response.json()).environments[0];
+          return state.state === "applied" ? state.observedRevision : null;
+        }),
+      { timeout: 30000 },
+    )
+    .toBe(revision);
 }
+
 try {
   fixture("create", adminEmail);
   admin = await attach(adminContext);
@@ -291,7 +301,7 @@ try {
     .getByRole("table", { name: "Role catalogue", exact: true })
     .getByText("E2E directory reader " + run, { exact: true })
     .waitFor();
-  mark("Role editor, versioned commit and real provider application passed.");
+  mark("Role editor, database revision and native authorization passed.");
   await admin.screenshot({
     path: artifacts + "/role-catalogue.png",
     fullPage: true,

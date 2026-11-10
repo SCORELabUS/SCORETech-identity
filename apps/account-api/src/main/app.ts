@@ -6,7 +6,7 @@ import type { AppConfig } from './config/app-config.js';
 import { createAdminAuthenticator } from '@scoretech/identity-internal';
 import { createAccountClient } from '@scoretech/identity-internal';
 import type { IdentityAccountClient } from '@scoretech/identity-internal';
-import { loadAuthorizationCatalogue } from './authorization-catalogue.js';
+import { ProviderCatalogueClient } from '@scoretech/identity-internal';
 import { errorHandler } from '@scoretech/identity-internal';
 import { createLogger, type Logger } from '@scoretech/identity-internal';
 import { createMetrics } from '@scoretech/identity-internal';
@@ -20,9 +20,11 @@ export interface AppDependencies {
 export const createApp = (config: AppConfig, dependencies: AppDependencies = {}) => {
   const app = express();
   const logger = dependencies.logger ?? createLogger(config.APP_LOG_LEVEL);
-  const catalogue = () => Promise.resolve(
-    dependencies.authorizationCatalogue ??
-    loadAuthorizationCatalogue(config.APP_AUTHORIZATION_CATALOGUE_PATH));
+  const providerCatalogue = new ProviderCatalogueClient(config);
+  const catalogue = () =>
+    dependencies.authorizationCatalogue
+      ? Promise.resolve(dependencies.authorizationCatalogue)
+      : providerCatalogue.projection();
   const identityClient =
     dependencies.identityClient ??
     createAccountClient({

@@ -1,7 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'yaml';
 import { loadConfig } from '../src/main/config/app-config.js';
 import {
@@ -9,10 +6,10 @@ import {
   validateCatalogue,
   writeCatalogue,
   AccessRuleSchema,
+  dumpYaml,
+  parseYaml,
 } from '../src/main/modules/catalogue/catalogue-model.js';
 import { CatalogueService } from '../src/main/modules/catalogue/catalogue-service.js';
-import { dumpYaml, parseYaml } from '../src/main/modules/catalogue/catalogue-model.js';
-import { Github } from '../src/main/modules/catalogue/github.js';
 const config = loadConfig({
   APP_CORS_ORIGINS: 'http://localhost:5173',
   APP_KEYCLOAK_ISSUER: 'https://identity.example.test/realms/test',
@@ -20,7 +17,6 @@ const config = loadConfig({
   APP_KEYCLOAK_REALM: 'test',
   APP_KEYCLOAK_ADMIN_CLIENT_SECRET: 'test',
   APP_IDENTITY_ENVIRONMENT: 'staging',
-  APP_CATALOGUE_BRANCH: 'main',
 });
 const source = `permissions:
   identity:
@@ -69,58 +65,6 @@ authorizationRegistry:
       permissions: [identity:users:read]
 `;
 
-const base = 'a'.repeat(40);
-const revision = 'b'.repeat(40);
-const overlay = (enabled = true, version = '0.2.0') =>
-  `service: identity-config-sync\nrepo: SCORETech-identity\nnamespace: staging-platform\nversion: ${version}\nenabled: '${enabled}'\nvalueFiles:\n  - environments/identity/identity-config-sync-values.yaml\n`;
-const directories: string[] = [];
-afterEach(() => {
-  for (const directory of directories.splice(0))
-    rmSync(directory, { recursive: true, force: true });
-});
-function fixture(overlayText = overlay()) {
-  const directory = mkdtempSync(join(tmpdir(), 'score-catalogue-'));
-  directories.push(directory);
-  const activePath = join(directory, 'catalogue.json');
-  const statePath = join(directory, 'apply-status.json');
-  const catalogue = readCatalogue(source);
-  writeFileSync(
-    activePath,
-    JSON.stringify({
-      permissions: catalogue.permissions.map(({ name }) => name),
-      roles: catalogue.roles.map(({ name }) => name),
-    }),
-  );
-  const github = {
-    head: vi.fn().mockResolvedValue(base),
-    file: vi.fn(async (path: string) =>
-      path.endsWith('identity-config-sync.yaml') || path.endsWith('identity-account-api.yaml')
-        ? path.endsWith('identity-account-api.yaml')
-          ? overlayText.replace('service: identity-config-sync', 'service: identity-account-api')
-          : overlayText
-        : path.endsWith('operations/index.yaml')
-          ? '[]'
-          : path.includes('/environments/')
-            ? '{}'
-            : source,
-    ),
-    commit: vi.fn().mockResolvedValue({ sha: revision, html_url: 'https://example.test/commit' }),
-    entries: vi.fn().mockResolvedValue([]),
-  };
-  return {
-    github,
-    activePath,
-    statePath,
-    service: new CatalogueService(
-      {
-        ...config,
-        APP_AUTHORIZATION_CATALOGUE_PATH: activePath,
-        APP_CATALOGUE_STATE_PATH: statePath,
-      },
-      github as unknown as Github,
-    ),
-  };
-}
 describe('catalogue invariants', () => {
   it('normalizes legacy whitespace and preserves unrelated realm configuration', () => {
     const catalogue = readCatalogue(source);
@@ -254,17 +198,15 @@ describe('additive application permissions', () => {
     const previous = readCatalogue(source);
     const next = structuredClone(previous);
     next.permissions = next.permissions.filter((permission) => permission.name !== 'courses:read');
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            applications: [
-              { name: 'Courses', enabled: false, requiredPermissions: ['courses:read'] },
-            ],
-          }),
-        ),
-      );
+    const fetcher = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          applications: [
+            { name: 'Courses', enabled: false, requiredPermissions: ['courses:read'] },
+          ],
+        }),
+      ),
+    );
     const service = new CatalogueService(config, undefined, fetcher);
     await expect(
       service.assertPermissionDeletion(next, previous, 'test-token'),
@@ -549,394 +491,6 @@ describe('default role', () => {
     );
   });
 });
-describe('Git publication boundary', () => {
-  it('keeps legal versions and other ambiguous strings compatible with YAML 1.1 readers', () => {
-    const data = { version: '2026-10-23', createdAt: '2026-11-03T04:00:00.000Z', value: 'yes' };
-    expect(parse(dumpYaml(data), { schema: 'yaml-1.1' })).toEqual(data);
-  });
-  it('retains active client token filters when publishing role changes', async () => {
-    const { service, github } = fixture();
-    const catalogue = readCatalogue(source);
-    catalogue.roles.find((role) => role.name === 'user')!.permissions = ['courses:read'];
-    await service.publish(base, catalogue, 'Change role while preserving token scopes', 'actor');
-    const files = github.commit.mock.calls[0][1] as { path: string; content: string }[];
-    const snapshot = files.find((file) => file.path.includes('/revisions/staging/'))!;
-    const before = parseYaml(source) as { authorizationRegistry: { clientTokenScopes: unknown } };
-    const after = parseYaml(snapshot.content) as {
-      authorizationRegistry: { clientTokenScopes: unknown };
-    };
-    expect(after.authorizationRegistry.clientTokenScopes).toEqual(
-      before.authorizationRegistry.clientTokenScopes,
-    );
-  });
-  it('rejects changing the registration baseline before writing Git', async () => {
-    const { service, github } = fixture();
-    const catalogue = readCatalogue(source);
-    await expect(
-      service.publish(
-        base,
-        { ...catalogue, defaultRole: 'user' },
-        'Change the registration default role',
-        'actor',
-      ),
-    ).rejects.toMatchObject({ status: 422, code: 'immutable_default_role' });
-    expect(github.commit).not.toHaveBeenCalled();
-  });
-  it('preserves the member baseline in every target for an old client omitting the field', async () => {
-    const { service, github } = fixture();
-    const prodPath = `environments/identity/generated/revisions/production/${'d'.repeat(64)}.yaml`;
-    const original = github.file.getMockImplementation()!;
-    github.file.mockImplementation(async (path: string) => {
-      if (path === prodPath) return source;
-      const text = await original(path);
-      return path.startsWith('environments/production/')
-        ? text.replace('environments/identity/identity-config-sync-values.yaml', prodPath)
-        : text;
-    });
-    const legacy = readCatalogue(source);
-    delete legacy.defaultRole;
-    await service.publish(base, legacy, 'Legacy catalogue client', 'actor', [
-      'staging',
-      'production',
-    ]);
-    const files = github.commit.mock.calls[0][1] as { path: string; content: string }[];
-    expect(
-      readCatalogue(files.find((f) => f.path.includes('/revisions/staging/'))!.content).defaultRole,
-    ).toBe('member');
-    expect(
-      readCatalogue(files.find((f) => f.path.includes('/revisions/production/'))!.content)
-        .defaultRole,
-    ).toBe('member');
-  });
-  it('rejects a default administrator before writing Git', async () => {
-    const { service, github } = fixture();
-    await expect(
-      service.publish(
-        base,
-        { ...readCatalogue(source), defaultRole: 'administrador' },
-        'Invalid catalogue request',
-        'actor',
-      ),
-    ).rejects.toMatchObject({ status: 422, code: 'protected_default_role' });
-    expect(github.commit).not.toHaveBeenCalled();
-  });
-  it('reads immutable operation history', async () => {
-    const { service } = fixture();
-    await expect(service.revisions()).resolves.toEqual([]);
-  });
-  it('publishes immutable snapshots and paired environment references directly', async () => {
-    const { service, github } = fixture();
-    await service.publish(base, readCatalogue(source), 'Review catalogue permissions', 'actor', [
-      'staging',
-      'production',
-    ]);
-    const files = github.commit.mock.calls[0][1] as { path: string; content: string }[];
-    for (const env of ['staging', 'production']) {
-      const snapshot = files.find((file) =>
-        new RegExp(`revisions/${env}/[a-f0-9]{64}\\.yaml$`).test(file.path),
-      )!;
-      expect(snapshot).toBeDefined();
-      expect(
-        files.find((file) => file.path === `environments/${env}/identity-config-sync.yaml`)!
-          .content,
-      ).toContain(snapshot.path);
-      expect(
-        files.find((file) => file.path === `environments/${env}/identity-account-api.yaml`)!
-          .content,
-      ).toContain(snapshot.path);
-      const normalize = (roles: ReturnType<typeof readCatalogue>['roles']) =>
-        roles.map((role) => ({ ...role, permissions: [...role.permissions].sort() }));
-      expect(normalize(readCatalogue(snapshot.content).roles)).toEqual(
-        normalize(readCatalogue(source).roles),
-      );
-    }
-    expect(
-      files.some((file) => file.path === 'environments/identity/generated/operations/index.yaml'),
-    ).toBe(true);
-  });
-  it.each([false, true])('blocks disabled or unmigrated registries (%s)', async (enabled) => {
-    const { service, github } = fixture(overlay(enabled));
-    if (enabled) {
-      const data = parseYaml(source) as Record<string, unknown>;
-      data.authorizationRegistry = { enabled: false };
-      const original = github.file.getMockImplementation()!;
-      github.file.mockImplementation(async (path: string) =>
-        path === 'environments/identity/identity-config-sync-values.yaml'
-          ? dumpYaml(data)
-          : original(path),
-      );
-    }
-    await expect(
-      service.publish(base, readCatalogue(source), 'Review catalogue permissions', 'actor'),
-    ).rejects.toMatchObject({ status: 409 });
-    expect(github.commit).not.toHaveBeenCalled();
-  });
-  it('checks optimistic concurrency before any Git write', async () => {
-    const github = new Github(config);
-    const request = vi.spyOn(github, 'request').mockResolvedValue({ object: { sha: revision } });
-    await expect(
-      github.commit(
-        base,
-        [{ path: 'environments/staging/identity-config-sync.yaml', content: 'enabled: true\n' }],
-        'Title',
-      ),
-    ).rejects.toMatchObject({ status: 409 });
-    expect(request).toHaveBeenCalledTimes(1);
-  });
-  it('restores historical roles while retaining current service permissions and contracts', async () => {
-    const { service, github } = fixture();
-    const catalogue = readCatalogue(source);
-    catalogue.roles.find((role) => role.name === 'admin')!.permissions = [];
-    const operation = await service.publish(base, catalogue, 'Save catalogue history', 'actor');
-    const files = github.commit.mock.calls[0][1] as { path: string; content: string }[];
-    const stored = new Map(files.map((file) => [file.path, file.content]));
-    const snapshotPath = `environments/identity/generated/revisions/staging/${operation.revisions.staging}.yaml`;
-    const data = parseYaml(stored.get(snapshotPath)!) as Record<string, unknown>;
-    const latest = readCatalogue(stored.get(snapshotPath)!);
-    latest.defaultRole = 'member';
-    latest.permissions.push({ name: 'new:permission', description: '' });
-    latest.roles.find((role) => role.name === 'administrador')!.permissions.push('new:permission');
-    latest.roles.find((role) => role.name === 'admin')!.permissions = ['new:permission'];
-    const current = parseYaml(writeCatalogue(latest, dumpYaml(data))) as Record<string, unknown>;
-    current.identityContracts = { fixture: { version: '2.0.0' } };
-    const activeScopes = [
-      { clientId: 'analytics-web', enabled: true, permissions: ['courses:read'] },
-    ];
-    (current.authorizationRegistry as Record<string, unknown>).clientTokenScopes = activeScopes;
-    const currentPath = `environments/identity/generated/revisions/staging/${'c'.repeat(64)}.yaml`;
-    stored.set(currentPath, dumpYaml(current));
-    for (const name of ['identity-config-sync', 'identity-account-api']) {
-      const path = `environments/staging/${name}.yaml`;
-      stored.set(path, stored.get(path)!.replace(snapshotPath, currentPath));
-    }
-    const original = github.file.getMockImplementation()!;
-    github.file.mockImplementation(async (path: string) => stored.get(path) ?? original(path));
-    const result = await service.rollback(
-      base,
-      operation.id,
-      ['staging'],
-      'Restore catalogue history',
-      'actor',
-    );
-    expect(result.type).toBe('rollback');
-    const mutations = github.commit.mock.calls[1][1] as { path: string; content: string }[];
-    expect(
-      readCatalogue(mutations.find((file) => file.path.includes('/revisions/staging/'))!.content)
-        .defaultRole,
-    ).toBe('member');
-    const restored = mutations.find((file) => file.path.includes('/generated/revisions/staging/'))!;
-    const roles = readCatalogue(restored.content).roles;
-    expect(roles.find((role) => role.name === 'admin')!.permissions).toEqual([]);
-    expect(roles.find((role) => role.name === 'administrador')!.permissions).toContain(
-      'new:permission',
-    );
-    expect((parseYaml(restored.content) as Record<string, unknown>).identityContracts).toEqual({
-      fixture: { version: '2.0.0' },
-    });
-    expect(
-      (parseYaml(restored.content) as { authorizationRegistry: { clientTokenScopes: unknown } })
-        .authorizationRegistry.clientTokenScopes,
-    ).toEqual(activeScopes);
-    expect(mutations.some((file) => file.path === snapshotPath)).toBe(false);
-  });
-  it('reads immutable comparison snapshots and rejects changed content or another environment', async () => {
-    const { service, github } = fixture();
-    const operation = await service.publish(
-      base,
-      readCatalogue(source),
-      'Save catalogue for comparison',
-      'actor',
-    );
-    const files = github.commit.mock.calls[0][1] as { path: string; content: string }[];
-    const stored = files.find((file) => file.path.includes('/generated/revisions/staging/'))!;
-    const original = github.file.getMockImplementation()!;
-    github.file.mockImplementation(async (path: string) =>
-      path.includes('/generated/revisions/') ? stored.content : original(path),
-    );
-    await expect(service.snapshot('staging', operation.revisions.staging!)).resolves.toHaveProperty(
-      'catalogue.roles',
-    );
-    await expect(
-      service.snapshot('production', operation.revisions.staging!),
-    ).rejects.toMatchObject({ status: 409, code: 'invalid_snapshot' });
-    const changed = parseYaml(stored.content) as Record<string, unknown>;
-    changed.displayName = 'Changed after publication';
-    stored.content = dumpYaml(changed);
-    await expect(service.snapshot('staging', operation.revisions.staging!)).rejects.toMatchObject({
-      status: 409,
-      code: 'changed_snapshot',
-    });
-  });
-  it('reads assignment roles only from the active projection for its configured environment', async () => {
-    const { service, github, activePath } = fixture();
-    github.head.mockRejectedValue(new Error('Git is unavailable'));
-    writeFileSync(activePath, JSON.stringify({ permissions: [], roles: ['member'] }));
-    await expect(service.assignmentRoles('staging')).resolves.toEqual(['member']);
-    writeFileSync(activePath, JSON.stringify({ permissions: [], roles: ['member', 'user'] }));
-    await expect(service.assignmentRoles('staging')).resolves.toEqual(['member', 'user']);
-    await expect(service.assignmentRoles('production')).rejects.toMatchObject({
-      status: 403,
-      code: 'environment_not_allowed',
-    });
-    expect(github.head).not.toHaveBeenCalled();
-    expect(github.file).not.toHaveBeenCalled();
-  });
-  it('does not fall back to desired Git roles when the active projection is missing', async () => {
-    const { service, github, activePath } = fixture();
-    rmSync(activePath);
-    await expect(service.assignmentRoles('staging')).rejects.toThrow();
-    expect(github.head).not.toHaveBeenCalled();
-    expect(github.file).not.toHaveBeenCalled();
-  });
-  it('reuses an immutable parsed snapshot but checks HEAD and isolates editor changes', async () => {
-    const { service, github } = fixture();
-    const first = await service.current('staging');
-    first.catalogue.roles.length = 0;
-    expect((await service.current('staging')).catalogue.roles.map(({ name }) => name)).toContain(
-      'user',
-    );
-    expect(github.head).toHaveBeenCalledTimes(2);
-    expect(github.file).toHaveBeenCalledTimes(2);
-    github.head.mockResolvedValue(revision);
-    const original = github.file.getMockImplementation()!;
-    github.file.mockImplementation(async (path) =>
-      (await original(path)).replace('      - name: user\n', ''),
-    );
-    expect(
-      (await service.current('staging')).catalogue.roles.map(({ name }) => name),
-    ).not.toContain('user');
-    expect(github.file).toHaveBeenCalledTimes(4);
-  });
-  it('coalesces concurrent catalogue reads and never serves cached roles on HEAD failure', async () => {
-    const { service, github } = fixture();
-    await Promise.all(Array.from({ length: 12 }, () => service.current('staging')));
-    expect(github.head).toHaveBeenCalledTimes(1);
-    expect(github.file).toHaveBeenCalledTimes(2);
-    github.head.mockRejectedValueOnce(new Error('HEAD unavailable'));
-    await expect(service.current('staging')).rejects.toThrow('HEAD unavailable');
-  });
-  it('retries failed snapshots and keeps environments separate at the same SHA', async () => {
-    const { service, github } = fixture();
-    github.file.mockRejectedValueOnce(new Error('Snapshot unavailable'));
-    await expect(service.current('staging')).rejects.toThrow('Snapshot unavailable');
-    expect((await service.current('staging')).catalogue.roles.map(({ name }) => name)).toContain(
-      'user',
-    );
-    expect((await service.current('production')).catalogue.roles.map(({ name }) => name)).toContain(
-      'user',
-    );
-    expect(github.file).toHaveBeenCalledTimes(5);
-  });
-});
-
-describe('file-backed catalogue application status', () => {
-  const desiredRevision = 'c'.repeat(64);
-  const previousRevision = 'd'.repeat(64);
-
-  it('keeps a saved Git revision pending until the provider application is reported', async () => {
-    const { service } = fixture();
-    await expect(service.status('staging')).resolves.toMatchObject({
-      environment: 'staging',
-      desiredRevision,
-      observedRevision: null,
-      generation: null,
-      state: 'pending',
-    });
-  });
-
-  it('marks a revision applied only after the observed revision matches', async () => {
-    const { service, statePath } = fixture();
-    writeFileSync(
-      statePath,
-      JSON.stringify({
-        observedRevision: desiredRevision,
-        generation: 2,
-        state: 'applied',
-      }),
-    );
-    await expect(service.status('staging')).resolves.toMatchObject({
-      desiredRevision,
-      observedRevision: desiredRevision,
-      generation: 2,
-      state: 'applied',
-      detail: expect.stringContaining('verified in the identity provider'),
-    });
-  });
-
-  it('does not mistake the previous applied revision for the current desired revision', async () => {
-    const { service, statePath } = fixture();
-    writeFileSync(
-      statePath,
-      JSON.stringify({
-        observedRevision: previousRevision,
-        generation: 1,
-        state: 'applied',
-      }),
-    );
-    await expect(service.status('staging')).resolves.toMatchObject({
-      desiredRevision,
-      observedRevision: previousRevision,
-      state: 'pending',
-    });
-  });
-
-  it('reports a failed application while keeping assignments on the previous active projection', async () => {
-    const { service, activePath, statePath } = fixture();
-    writeFileSync(activePath, JSON.stringify({ permissions: [], roles: ['member'] }));
-    writeFileSync(
-      statePath,
-      JSON.stringify({
-        observedRevision: previousRevision,
-        generation: 1,
-        state: 'failed',
-        detail: 'Provider reconciliation failed.',
-      }),
-    );
-    await expect(service.status('staging')).resolves.toMatchObject({
-      desiredRevision,
-      observedRevision: previousRevision,
-      state: 'failed',
-      detail: 'Provider reconciliation failed.',
-    });
-    await expect(service.assignmentRoles('staging')).resolves.toEqual(['member']);
-  });
-
-  it('reports an in-progress application without declaring it applied', async () => {
-    const { service, statePath } = fixture();
-    writeFileSync(
-      statePath,
-      JSON.stringify({
-        observedRevision: previousRevision,
-        state: 'applying',
-      }),
-    );
-    await expect(service.status('staging')).resolves.toMatchObject({
-      desiredRevision,
-      observedRevision: previousRevision,
-      state: 'applying',
-    });
-  });
-
-  it('treats an unreadable status document as unconfirmed application', async () => {
-    const { service, statePath } = fixture();
-    writeFileSync(statePath, 'incomplete JSON');
-    await expect(service.status('staging')).resolves.toMatchObject({
-      desiredRevision,
-      observedRevision: null,
-      state: 'pending',
-    });
-  });
-
-  it('rejects another environment before reading its desired catalogue', async () => {
-    const { service, github } = fixture();
-    await expect(service.status('production')).rejects.toMatchObject({
-      status: 403,
-      code: 'environment_not_allowed',
-    });
-    expect(github.head).not.toHaveBeenCalled();
-  });
-});
-
 describe('administrative catalogue access', () => {
   it('allows service access and role management grants through ordinary catalogue roles', () => {
     const catalogue = readCatalogue(source);

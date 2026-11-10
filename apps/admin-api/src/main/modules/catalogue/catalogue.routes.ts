@@ -8,7 +8,7 @@ import type { Principal } from '../auth/oidc-authenticator.js';
 import { CatalogueSchema, validateCatalogue, type Catalogue } from './catalogue-model.js';
 import type { CatalogueService, CatalogueAuthorization } from './catalogue-service.js';
 import { Environment } from './catalogue-service.js';
-const Sha = z.string().regex(/^[a-f0-9]{40}$/);
+const Sha = z.string().regex(/^[a-f0-9]{64}$/);
 const Targets = z
   .array(Environment)
   .min(1)

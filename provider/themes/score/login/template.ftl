@@ -52,7 +52,7 @@
                 <h1>A shared identity<br>for your research.</h1>
                 <p class="tp-brand-description">Access your SCORE services securely and manage your account in one place.</p>
             </div>
-            <p class="tp-brand-footer">Smart Computer Systems<br>Research and Engineering</p>
+            <div class="tp-brand-footer"><p>Smart Computer Systems<br>Research and Engineering</p><nav aria-label="Legal documents"><a class="cursor-pointer" href="/identity/legal/terms" target="_blank" rel="noopener noreferrer">Terms</a> · <a class="cursor-pointer" href="/identity/legal/privacy" target="_blank" rel="noopener noreferrer">Privacy</a></nav></div>
         </section>
         <section class="tp-auth-panel" aria-labelledby="tp-auth-title">
             <div class="tp-auth-panel-inner">

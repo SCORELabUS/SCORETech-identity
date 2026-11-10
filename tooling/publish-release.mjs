@@ -81,7 +81,7 @@ export function releaseNotes({
     "```bash",
     "git pull --ff-only origin main",
     "docker compose -f docker/production/compose.yaml pull",
-    "docker compose -f docker/production/compose.yaml up -d --no-build --wait --wait-timeout 300",
+    "docker compose -f docker/production/compose.yaml up -d --no-build --remove-orphans --wait --wait-timeout 300",
     "```",
     "",
     "The production environment uses `IDENTITY_VERSION=main`. No detached checkout or routine version edit is required.",

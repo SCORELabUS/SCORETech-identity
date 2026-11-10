@@ -47,12 +47,6 @@ async function productionFixture(t) {
     BREVO_SMTP_KEY_FILE: files["smtp-key"],
     BREVO_SENDER_EMAIL: "identity@example.org",
     BREVO_SENDER_NAME: "SCORETech Identity test sender",
-    IDENTITY_TERMS_URL: "https://example.org/legal/terms",
-    IDENTITY_TERMS_VERSION: "test-v1",
-    IDENTITY_TERMS_DIGEST: "sha256:" + randomBytes(32).toString("hex"),
-    IDENTITY_PRIVACY_URL: "https://example.org/legal/privacy",
-    IDENTITY_PRIVACY_VERSION: "test-v1",
-    IDENTITY_PRIVACY_DIGEST: "sha256:" + randomBytes(32).toString("hex"),
   };
   // Rendering must remain local even when inputs resemble deployment settings.
   const fetch = t.mock.method(globalThis, "fetch", () => {
@@ -166,12 +160,6 @@ test("production rendering refuses local mode and missing deployment inputs", as
     "IDENTITY_WEBAUTHN_RP_ID",
     "IDENTITY_BOOTSTRAP_EMAIL",
     "BREVO_SENDER_EMAIL",
-    "IDENTITY_TERMS_URL",
-    "IDENTITY_TERMS_VERSION",
-    "IDENTITY_TERMS_DIGEST",
-    "IDENTITY_PRIVACY_URL",
-    "IDENTITY_PRIVACY_VERSION",
-    "IDENTITY_PRIVACY_DIGEST",
     "IDENTITY_ADMIN_SECRET_FILE",
     "IDENTITY_ACCOUNT_SECRET_FILE",
     "IDENTITY_SYNC_SECRET_FILE",
@@ -222,7 +210,7 @@ test("production rendering rejects contaminated laboratory runtime directories",
   assert.equal(fetch.mock.callCount(), 0);
 });
 
-test("production rendering validates the RP domain and published document references", async (t) => {
+test("production rendering validates the RP domain and derives bundled document references", async (t) => {
   const { env, fetch } = await productionFixture(t);
   for (const rpId of [
     "unrelated.example.net",
@@ -233,15 +221,6 @@ test("production rendering validates the RP domain and published document refere
       renderProduction({ ...env, IDENTITY_WEBAUTHN_RP_ID: rpId }),
       /RP_ID/,
     );
-  }
-  for (const override of [
-    { IDENTITY_TERMS_URL: "http://example.org/terms" },
-    { IDENTITY_PRIVACY_URL: "https://user:password@example.org/privacy" },
-    { IDENTITY_TERMS_URL: "https://example.org/terms#mutable" },
-    { IDENTITY_PRIVACY_VERSION: "version with spaces" },
-    { IDENTITY_TERMS_DIGEST: "sha256:missing-digest" },
-  ]) {
-    await assert.rejects(renderProduction({ ...env, ...override }));
   }
   const artifacts = await renderProduction({
     ...env,
@@ -285,6 +264,23 @@ test("production rendering keeps secrets private and emits only public deploymen
     ).secret,
     values.account,
   );
+  for (const kind of ["terms", "privacy"]) {
+    assert.equal(
+      realm.attributes[`tentu.legal.${kind}.url`],
+      env.IDENTITY_PUBLIC_ORIGIN + "/identity/legal/" + kind,
+    );
+    assert.match(
+      realm.attributes[`tentu.legal.${kind}.digest`],
+      /^sha256:[a-f0-9]{64}$/,
+    );
+    const html = await readFile(
+      path.join(runtime, `web/legal/${kind}.html`),
+      "utf8",
+    );
+    assert.match(html, /infoscore@us.es/);
+    for (const secret of Object.values(values))
+      assert.ok(!html.includes(secret));
+  }
   assert.equal(realm.smtpServer.password, values["smtp-key"]);
   assert.equal(realm.smtpServer.ssl, "true");
   assert.equal(realm.smtpServer.port, "465");
@@ -324,7 +320,7 @@ test("production rendering keeps secrets private and emits only public deploymen
   assert.equal(fetch.mock.callCount(), 0);
 });
 
-test("rerendering preserves the synchronizer-owned applied catalogue and status", async (t) => {
+test("rerendering preserves legacy catalogue files for one-time database migration", async (t) => {
   const { env, runtime, fetch } = await productionFixture(t);
   const catalogueDirectory = path.join(runtime, "catalogue");
   await mkdir(catalogueDirectory, { recursive: true });

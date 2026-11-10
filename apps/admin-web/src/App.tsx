@@ -670,7 +670,7 @@ function UserEditor({
       ) : tab === "roles" ? (
         <>
           <p className="muted text-small">
-            Select roles from the applied catalogue. Saved but unapplied
+            Select roles from the active catalogue. Unavailable
             definitions cannot be assigned.
           </p>
           {catalogue.error ? <Notice message={catalogue.error} /> : null}
@@ -1479,7 +1479,7 @@ function Roles() {
   };
   const publish = (catalogue: Catalogue) =>
     task.execute(
-      "Role catalogue saved. Waiting for verified application.",
+      "Roles saved. Changes are active.",
       async () => {
         await api(config.adminApiUrl + "/catalogue/revisions", {
           method: "POST",
@@ -1708,7 +1708,7 @@ function Roles() {
                     );
                     if (restoreReason && restoreReason.trim().length >= 8)
                       void task.execute(
-                        "Restoration saved. Waiting for application.",
+                        "Roles restored. Changes are active.",
                         async () => {
                           await api(
                             config.adminApiUrl + "/catalogue/rollbacks",

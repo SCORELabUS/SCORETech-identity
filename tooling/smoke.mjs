@@ -3,6 +3,8 @@ const host = process.env.SMOKE_ORIGIN || "http://gateway:18000";
 for (const endpoint of [
   "/identity/account/",
   "/identity/admin/",
+  "/identity/legal/terms",
+  "/identity/legal/privacy",
   "/identity/api/account/health",
   "/identity/api/admin/health",
   "/identity/auth/realms/score/.well-known/openid-configuration",
@@ -35,6 +37,7 @@ for (const endpoint of [
   assert.ok([401, 404].includes(r.status), endpoint + ": " + r.status);
 }
 for (const endpoint of [
+  "score-catalogue",
   "score-applications",
   "score-identities",
   "account/linked-accounts",

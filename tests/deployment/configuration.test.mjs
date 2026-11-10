@@ -123,7 +123,7 @@ test(
           "service_completed_successfully",
         );
         assert.equal(
-          model.services["catalogue-fixture"].depends_on.prepare.condition,
+          model.services["catalogue-init"].depends_on.bootstrap.condition,
           "service_completed_successfully",
         );
         assert.equal(
@@ -135,8 +135,7 @@ test(
       const images = {
         render: "tooling",
         "realm-setup": "tooling",
-        "catalogue-seed": "tooling",
-        "config-sync": "tooling",
+        "catalogue-init": "tooling",
         keycloak: "provider",
         "account-api": "account",
         "admin-api": "admin",
@@ -165,15 +164,7 @@ test(
         "service_completed_successfully",
       );
       assert.equal(
-        model.services["catalogue-seed"].depends_on.render.condition,
-        "service_completed_successfully",
-      );
-      assert.equal(
-        model.services["config-sync"].depends_on["catalogue-seed"].condition,
-        "service_completed_successfully",
-      );
-      assert.equal(
-        model.services["config-sync"].depends_on["realm-setup"].condition,
+        model.services["catalogue-init"].depends_on["realm-setup"].condition,
         "service_completed_successfully",
       );
       assert.deepEqual(
@@ -197,7 +188,7 @@ test(
         "IDENTITY_ACCOUNT_CLIENT_SECRET",
       );
       assert.equal(model.services.render.profiles, undefined);
-      assert.equal(model.services["catalogue-seed"].profiles, undefined);
+      assert.equal(model.services["catalogue-init"].profiles, undefined);
     }
     assert.equal(
       models.production.volumes["identity-database"].name,

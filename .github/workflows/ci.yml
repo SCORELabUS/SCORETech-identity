@@ -25,6 +25,7 @@ jobs:
       # The provider Docker build includes its Java regression suite.
       - run: ./lab up
       - run: ./lab check
+      - run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e:catalogue
       # Lab secrets deliberately belong to container UID 1000 (0600/0700).
       # Hosted runners use another UID. Privileged fixture tests can read them
       # without widening permissions or changing the API/provider ownership.

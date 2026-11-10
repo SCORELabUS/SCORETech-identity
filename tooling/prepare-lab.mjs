@@ -1,3 +1,4 @@
+import { legalReferences, renderLegal } from "./legal-documents.mjs";
 import {
   readFile,
   writeFile,
@@ -6,7 +7,6 @@ import {
   chmod,
   chown,
 } from "node:fs/promises";
-import { generateKeyPairSync } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
@@ -240,7 +240,7 @@ export async function renderIdentityArtifacts({
       secret: serviceSecrets[kind],
       protocolMappers: [
         audience("realm-management"),
-        ...(kind === "admin" ? [audience("identity-provider")] : []),
+        audience("identity-provider"),
       ],
     });
     realm.users.push({
@@ -375,6 +375,30 @@ export async function writePublicConfiguration(
   c,
   { lab = false } = {},
 ) {
+  const directory = path.join(runtime, "web/legal");
+  await mkdir(path.join(directory, "assets"), { recursive: true });
+  await chmod(directory, 0o755);
+  await chmod(path.join(directory, "assets"), 0o755);
+  for (const kind of ["terms", "privacy"])
+    await secureRuntimeFile(
+      path.join(directory, kind + ".html"),
+      renderLegal(kind),
+      { publicFile: true },
+    );
+  for (const weight of [400, 700]) {
+    const font = await readFile(
+      path.join(
+        source,
+        "packages/ui/node_modules/@fontsource/source-sans-pro/files",
+        `source-sans-pro-latin-${weight}-normal.woff2`,
+      ),
+    );
+    await secureRuntimeFile(
+      path.join(directory, "assets", `source-${weight}.woff2`),
+      font,
+      { publicFile: true },
+    );
+  }
   for (const kind of ["account", "admin"]) {
     const config = {
       ...c,
@@ -398,20 +422,7 @@ export async function prepareLaboratory(env = process.env) {
   const c = configuration(env);
   if (c.environment !== "local")
     throw new Error("Lab preparation is restricted to the local environment.");
-  // These registration references are explicit local fixtures, never production legal documents.
-  const legalDocuments = Object.fromEntries(
-    ["terms", "privacy"].map((kind) => {
-      const body = `Local SCORETech Identity ${kind} fixture. For testing only.`;
-      return [
-        kind,
-        {
-          url: c.root + "/legal/" + kind,
-          version: "lab-v1",
-          digest: "sha256:" + digest(body),
-        },
-      ];
-    }),
-  );
+  const legalDocuments = legalReferences(c.origin);
   const artifacts = await renderIdentityArtifacts({
     config: c,
     identityProviders: await loadExternalSso(runtime, true),
@@ -449,8 +460,6 @@ export async function prepareLaboratory(env = process.env) {
     "import",
     "catalogue",
     "web",
-    "keys",
-    "github",
     "coordination",
   ]);
   if (!(await exists(path.join(runtime, "coordination/authorization.lock"))))
@@ -462,42 +471,6 @@ export async function prepareLaboratory(env = process.env) {
     path.join(runtime, "import/score-realm.json"),
     JSON.stringify(artifacts.realm, null, 2) + "\n",
   );
-  const stateFile = path.join(runtime, "github/state.json");
-  if (!(await exists(stateFile))) {
-    const sha = digest(artifacts.files).slice(0, 40);
-    await secureRuntimeFile(
-      stateFile,
-      JSON.stringify({
-        head: sha,
-        commits: { [sha]: { tree: sha, parents: [] } },
-        trees: { [sha]: artifacts.files },
-      }),
-    );
-  }
-  if (!(await exists(path.join(runtime, "catalogue/catalogue.json")))) {
-    await secureRuntimeFile(
-      path.join(runtime, "catalogue/catalogue.json"),
-      JSON.stringify({
-        permissions: artifacts.permissions,
-        roles: artifacts.roles.map((role) => role.name),
-      }),
-    );
-    await secureRuntimeFile(
-      path.join(runtime, "catalogue/active-registry.json"),
-      JSON.stringify(artifacts.registry),
-    );
-  }
-  const keyFile = path.join(runtime, "keys/github.pem");
-  if (!(await exists(keyFile))) {
-    const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-    await secureRuntimeFile(
-      keyFile,
-      privateKey.export({ type: "pkcs8", format: "pem" }),
-    );
-  }
-  // Tighten an existing fixture key too; never make it world-readable for the API.
-  await chmod(keyFile, 0o600);
-  if (process.getuid?.() === 0) await chown(keyFile, 1000, 1000);
   await writePublicConfiguration(runtime, c, { lab: true });
   console.log(
     "Prepared isolated SCORETech Identity laboratory. No external services were contacted.",

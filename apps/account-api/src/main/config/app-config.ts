@@ -42,7 +42,6 @@ const EnvSchema = z.object({
     .enum(['true', 'false'])
     .default('false')
     .transform((value) => value === 'true'),
-  APP_AUTHORIZATION_CATALOGUE_PATH: z.string().default('/etc/identity/catalogue.json'),
 });
 export type AppConfig = z.infer<typeof EnvSchema>;
 export const loadConfig = (

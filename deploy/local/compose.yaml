@@ -8,14 +8,6 @@ x-config: &config
   APP_REQUIRE_ADMIN_PASSKEY: 'true'
   APP_IDENTITY_ENVIRONMENT: local
   APP_ACCOUNT_PUBLIC_URL: http://localhost:${IDENTITY_LAB_PORT:-18000}/identity/account/
-  APP_AUTHORIZATION_CATALOGUE_PATH: /runtime/catalogue/catalogue.json
-  APP_CATALOGUE_STATE_PATH: /runtime/catalogue/apply-status.json
-  APP_GITHUB_API_URL: http://catalogue-fixture:8090
-  APP_GITHUB_APP_ID: '1'
-  APP_GITHUB_INSTALLATION_ID: '1'
-  APP_GITHUB_PRIVATE_KEY_FILE: /runtime/keys/github.pem
-  APP_CATALOGUE_REPO: SCORELabUS/SCORETech-identity
-  APP_CATALOGUE_BRANCH: identity-catalogue
 services:
   prepare:
     image: scoretech-identity-tooling:local
@@ -56,13 +48,6 @@ services:
       timeout: 5s
       retries: 40
       start_period: 25s
-  catalogue-fixture:
-    image: scoretech-identity-tooling:local
-    command: [node, tooling/catalogue-fixture.mjs]
-    environment: {IDENTITY_RUNTIME_DIR: /runtime}
-    volumes: [./.lab:/runtime]
-    depends_on: {prepare: {condition: service_completed_successfully}}
-    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 3s, retries: 30}
   bootstrap:
     image: scoretech-identity-tooling:local
     command: [node, tooling/bootstrap-lab.mjs]
@@ -71,17 +56,16 @@ services:
       - ./.lab/import:/runtime/import:ro
       - ./.lab/coordination:/runtime/coordination
     depends_on: {keycloak: {condition: service_healthy}}
-  config-sync:
+  catalogue-init:
     image: scoretech-identity-tooling:local
-    command: [node, tooling/sync-catalogue.mjs, --watch]
+    command: [node, tooling/init-catalogue.mjs]
     environment:
       <<: *config
-      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      IDENTITY_RUNTIME_DIR: /runtime
       APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-config-sync
       APP_KEYCLOAK_ADMIN_CLIENT_SECRET: fixture-local-config-sync
-    volumes: [./.lab:/runtime]
-    depends_on: {bootstrap: {condition: service_completed_successfully}, catalogue-fixture: {condition: service_healthy}}
-    healthcheck: {test: [CMD, node, -e, "const fs=require('fs');try{process.exit(JSON.parse(fs.readFileSync('/runtime/catalogue/apply-status.json')).state==='applied'?0:1)}catch{process.exit(1)}"], interval: 5s, retries: 30}
+    volumes: [./.lab:/runtime:ro]
+    depends_on: {bootstrap: {condition: service_completed_successfully}}
   account-api:
     image: scoretech-identity-api:local
     build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: api}
@@ -92,7 +76,7 @@ services:
       APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-account-service
       APP_KEYCLOAK_ADMIN_CLIENT_SECRET: fixture-local-account-service
     volumes: [./.lab:/runtime:ro, identity-avatars:/var/lib/identity-avatars]
-    depends_on: {config-sync: {condition: service_healthy}}
+    depends_on: {catalogue-init: {condition: service_completed_successfully}}
     healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 5s, retries: 20}
   admin-api:
     image: scoretech-identity-api:local
@@ -105,7 +89,7 @@ services:
     volumes:
       - ./.lab:/runtime:ro
       - ./.lab/coordination:/runtime/coordination
-    depends_on: {config-sync: {condition: service_healthy}}
+    depends_on: {catalogue-init: {condition: service_completed_successfully}}
     healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 5s, retries: 20}
   gateway:
     image: scoretech-identity-web:local
