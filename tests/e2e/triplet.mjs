@@ -338,9 +338,8 @@ try {
   ).toHaveCount(0);
   mark("Profile persistence, security and sessions passed.");
   await member.goto(origin + "/identity/admin/");
-  await member
-    .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
-    .click();
+  // The Account session is recovered automatically by Admin's same-origin SSO
+  // probe; authorization must still deny this member without another sign-in.
   await member
     .getByRole("heading", { name: "Access is not available.", exact: true })
     .waitFor({ timeout: 30000 });
