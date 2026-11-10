@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+environment="${1:-production}"
+case "$environment" in
+  production|staging) ;;
+  *) printf 'Usage: docker/setup [production|staging]\n' >&2; exit 2 ;;
+esac
+command -v openssl >/dev/null || { printf 'OpenSSL is required.\n' >&2; exit 1; }
+destination="$ROOT/docker/$environment/.env"
+umask 077
+trap 'printf "Configuration failed at line %s. Existing credentials were retained.\n" "$LINENO" >&2' ERR
+# Never regenerate or append credentials on an existing installation.
+if [[ -e "$destination" ]]; then
+  printf 'Retained existing %s. No credentials changed.\n' "$destination"
+  exit 0
+fi
+temporary="$(mktemp "$ROOT/docker/$environment/.env.setup.XXXXXX")"
+trap 'rm -f -- "$temporary"' EXIT
+while IFS= read -r line || [[ -n "$line" ]]; do
+  case "$line" in
+    IDENTITY_DATABASE_PASSWORD=|IDENTITY_BOOTSTRAP_PASSWORD=|IDENTITY_ADMIN_CLIENT_SECRET=|IDENTITY_ACCOUNT_CLIENT_SECRET=|IDENTITY_SYNC_CLIENT_SECRET=)
+      printf '%s%s\n' "$line" "$(openssl rand -hex 32)" ;;
+    *) printf '%s\n' "$line" ;;
+  esac
+done < "$ROOT/docker/$environment/.env.example" > "$temporary"
+# ln fails rather than replacing a file if another setup process won the race.
+ln "$temporary" "$destination"
+mkdir -p -- "$ROOT/docker/$environment/secrets"
+printf 'Created %s with unique internal credentials.\nFill deployment/Brevo values and install the GitHub App PEM at docker/%s/secrets/github-app.pem before starting Compose.\n' "$destination" "$environment"

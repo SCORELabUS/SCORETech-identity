@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.6.xsd">
+<changeSet id="tentu-invitations-1" author="tentuplaza">
+<createTable tableName="TENTU_INVITATION">
+<column name="ID" type="varchar(36)"><constraints nullable="false" primaryKey="true"/></column>
+<column name="REALM_ID" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="ENVIRONMENT" type="varchar(16)"><constraints nullable="false"/></column>
+<column name="NAME" type="varchar(150)"><constraints nullable="false"/></column>
+<column name="TOKEN_HASH" type="varchar(64)"><constraints nullable="false"/></column>
+<column name="ROLE_NAMES" type="varchar(16000)"><constraints nullable="false"/></column>
+<column name="ROLE_FINGERPRINT" type="varchar(64)"><constraints nullable="false"/></column>
+<column name="CATALOGUE_REVISION" type="varchar(64)"><constraints nullable="false"/></column>
+<column name="CAPACITY" type="int"><constraints nullable="false"/></column>
+<column name="COMPLETED" type="int"><constraints nullable="false"/></column>
+<column name="CREATOR" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="CREATED_AT" type="bigint"><constraints nullable="false"/></column>
+<column name="EXPIRES_AT" type="bigint"><constraints nullable="true"/></column>
+<column name="REVOKED_AT" type="bigint"><constraints nullable="true"/></column>
+<column name="LOCK_VERSION" type="bigint"><constraints nullable="false"/></column>
+</createTable>
+<createTable tableName="TENTU_INVITATION_REDEMPTION">
+<column name="ID" type="varchar(36)"><constraints nullable="false" primaryKey="true"/></column>
+<column name="INVITATION_ID" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="REALM_ID" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="USER_ID" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="COMPLETED_AT" type="bigint"><constraints nullable="false"/></column>
+<column name="ROLE_NAMES" type="varchar(16000)"><constraints nullable="false"/></column>
+<column name="CATALOGUE_REVISION" type="varchar(64)"><constraints nullable="false"/></column>
+</createTable>
+<addUniqueConstraint tableName="TENTU_INVITATION" columnNames="TOKEN_HASH" constraintName="TENTU_INVITE_TOKEN_UK"/>
+<addUniqueConstraint tableName="TENTU_INVITATION_REDEMPTION" columnNames="REALM_ID,USER_ID" constraintName="TENTU_INVITE_USER_UK"/>
+<addForeignKeyConstraint baseTableName="TENTU_INVITATION_REDEMPTION" baseColumnNames="INVITATION_ID" referencedTableName="TENTU_INVITATION" referencedColumnNames="ID" constraintName="TENTU_INVITE_REDEMPTION_FK"/>
+<createIndex tableName="TENTU_INVITATION" indexName="TENTU_INVITE_REALM_IDX"><column name="REALM_ID"/><column name="CREATED_AT"/></createIndex>
+<createIndex tableName="TENTU_INVITATION_REDEMPTION" indexName="TENTU_INVITE_USERS_IDX"><column name="INVITATION_ID"/><column name="COMPLETED_AT"/></createIndex>
+</changeSet><changeSet id="tentu-recovery-1" author="tentuplaza">
+<createTable tableName="TENTU_RECOVERY">
+<column name="ID" type="varchar(36)"><constraints primaryKey="true" nullable="false"/></column>
+<column name="REALM_ID" type="varchar(36)"></column>
+<column name="USER_ID" type="varchar(36)"></column>
+<column name="ACTOR_ID" type="varchar(36)"></column>
+<column name="ENVIRONMENT" type="varchar(16)"></column>
+<column name="REASON" type="varchar(500)"></column>
+<column name="CASE_REFERENCE" type="varchar(150)"></column>
+<column name="TOKEN_HASH" type="varchar(64)"></column>
+<column name="SESSION_HASH" type="varchar(64)"></column>
+<column name="STATE" type="varchar(16)"></column>
+<column name="ROOT_ID" type="varchar(128)"></column>
+<column name="TAB_ID" type="varchar(128)"></column>
+<column name="METHOD" type="varchar(64)"></column>
+<column name="CREATED_AT" type="bigint"></column>
+<column name="EXPIRES_AT" type="bigint"></column>
+<column name="COMPLETED_AT" type="bigint"></column>
+<column name="ATTEMPTS" type="int"></column>
+<column name="LOCK_VERSION" type="bigint"/>
+</createTable>
+<addUniqueConstraint tableName="TENTU_RECOVERY" columnNames="TOKEN_HASH" constraintName="TENTU_RECOVERY_TOKEN_UK"/>
+<addUniqueConstraint tableName="TENTU_RECOVERY" columnNames="SESSION_HASH" constraintName="TENTU_RECOVERY_SESSION_UK"/>
+<createIndex tableName="TENTU_RECOVERY" indexName="TENTU_RECOVERY_USER_IDX"><column name="REALM_ID"/><column name="USER_ID"/></createIndex>
+</changeSet>
+</databaseChangeLog>

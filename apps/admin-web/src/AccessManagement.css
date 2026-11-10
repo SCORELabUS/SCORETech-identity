@@ -1,0 +1,451 @@
+.role-revision-history > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  list-style: none;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.role-revision-history > summary::-webkit-details-marker {
+  display: none;
+}
+
+.role-revision-history > summary h2 {
+  margin: 0;
+}
+
+.role-revision-history > summary svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.role-revision-history[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.role-revision-history > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 6px;
+}
+
+.role-revision-description {
+  margin: 12px 0 22px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.access-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 14px;
+  margin: 0 0 20px;
+}
+
+.access-search {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  color: var(--muted);
+}
+
+.access-search > svg {
+  flex-shrink: 0;
+}
+
+.access-result-count,
+.access-readonly-note,
+.access-scope-note,
+.access-modal-note {
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+}
+
+.access-result-count {
+  white-space: nowrap;
+}
+
+.access-readonly-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.access-readonly-note svg {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.access-permission-list {
+  margin-top: 12px;
+}
+
+.access-permission-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.access-permission-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.access-item-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  color: var(--red);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--red) 7%, var(--surface));
+}
+
+.access-permission-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.access-permission-copy > code {
+  display: block;
+  padding-top: 1px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.access-permission-copy > p {
+  margin: 7px 0 0;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.access-explainer {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0 7px;
+  color: var(--muted);
+}
+
+.access-explainer > svg {
+  color: var(--success);
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.access-explainer p {
+  max-width: 770px;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+.access-modal-note {
+  padding-left: 12px;
+  margin: 0;
+  border-left: 2px solid var(--line);
+}
+
+.access-rule-list {
+  display: grid;
+  gap: 17px;
+  margin-top: 24px;
+}
+
+.access-rule-card {
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.access-rule-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.access-rule-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.access-rule-title h3 {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+
+.access-rule-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.79rem;
+  overflow-wrap: anywhere;
+}
+
+.access-rule-title p > span {
+  margin-right: 5px;
+}
+
+.access-rule-title code {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.access-origin {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 22px 0;
+  padding: 15px 17px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--soft);
+}
+
+.access-origin > span,
+.access-required-heading > span:first-child {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.access-origin > code {
+  font-size: 0.86rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.access-required-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.access-required-heading .badge {
+  font-size: 0.65rem;
+}
+
+.access-permission-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.access-permission-chips > code {
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.76rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.access-builtin-row {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 15px;
+  padding: 22px 0;
+  border-top: 1px solid var(--line);
+}
+
+.access-builtin-row:last-child {
+  padding-bottom: 0;
+}
+
+.access-builtin-row > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.access-builtin-row h3 {
+  margin: 0 0 7px;
+  font-size: 1rem;
+}
+
+.access-builtin-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.access-builtin-row code {
+  color: var(--text);
+  font-size: 0.77rem;
+}
+
+.access-permission-picker {
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.access-permission-picker legend {
+  padding: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.access-permission-picker > p {
+  margin: 7px 0 13px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.access-permission-picker > .access-search {
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.access-checkbox-list {
+  max-height: 275px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.access-permission-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.access-permission-checkbox:last-child {
+  border-bottom: 0;
+}
+
+.access-permission-checkbox > input {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin: 2px 0 0;
+  accent-color: var(--red);
+}
+
+.access-permission-checkbox > span {
+  min-width: 0;
+}
+
+.access-permission-checkbox code {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.access-permission-checkbox > span > span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.access-selected-count {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.access-no-results {
+  margin: 0;
+  padding: 17px 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.access-delete-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--soft);
+}
+
+.access-delete-summary > svg {
+  color: var(--danger);
+}
+
+.access-delete-summary > code {
+  max-width: 100%;
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.access-delete-summary p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.87rem;
+  line-height: 1.6;
+}
+
+:root.dark .access-item-icon {
+  color: #f08b9c;
+}
+
+@media (max-width: 650px) {
+  .access-toolbar,
+  .access-search {
+    width: 100%;
+  }
+
+  .access-rule-card {
+    padding: 18px;
+  }
+
+  .access-rule-heading .button-group {
+    flex-basis: 100%;
+    justify-content: flex-start;
+    padding-left: 51px;
+  }
+
+  .access-permission-row {
+    flex-wrap: wrap;
+  }
+
+  .access-permission-row > .badge {
+    margin-left: 52px;
+  }
+
+  .access-builtin-row > .badge {
+    margin-left: 53px;
+  }
+}
+
+.catalogue-delete-action {
+  color: var(--danger);
+}
+
+@media (max-width: 600px) {
+  .access-result-count {
+    display: none;
+  }
+}

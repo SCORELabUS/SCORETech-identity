@@ -1,0 +1,181 @@
+name: scoretech-identity
+x-api-env: &api-env
+  APP_KEYCLOAK_ISSUER: ${IDENTITY_PUBLIC_ORIGIN:?}/identity/auth/realms/score
+  APP_KEYCLOAK_TRANSPORT_URL: http://keycloak:8080/identity/auth/realms/score
+  APP_KEYCLOAK_ADMIN_URL: http://keycloak:8080/identity/auth
+  APP_KEYCLOAK_REALM: score
+  APP_CORS_ORIGINS: ${IDENTITY_PUBLIC_ORIGIN:?}
+  APP_REQUIRE_ADMIN_PASSKEY: 'true'
+  APP_IDENTITY_ENVIRONMENT: ${IDENTITY_ENVIRONMENT:-production}
+  APP_ACCOUNT_PUBLIC_URL: ${IDENTITY_PUBLIC_ORIGIN:?}/identity/account/
+  APP_AUTHORIZATION_CATALOGUE_PATH: /runtime/catalogue/catalogue.json
+  APP_CATALOGUE_STATE_PATH: /runtime/catalogue/apply-status.json
+x-github-env: &github-env
+  APP_GITHUB_APP_ID: ${IDENTITY_GITHUB_APP_ID:?}
+  APP_GITHUB_INSTALLATION_ID: ${IDENTITY_GITHUB_INSTALLATION_ID:?}
+  APP_GITHUB_PRIVATE_KEY_FILE: /run/secrets/github_key
+  APP_CATALOGUE_REPO: ${IDENTITY_CATALOGUE_REPO:-SCORELabUS/SCORETech-identity}
+  APP_CATALOGUE_BRANCH: ${IDENTITY_CATALOGUE_BRANCH:-identity-catalogue}
+services:
+  render:
+    user: '0:0'
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    command: [node, tooling/render-production.mjs]
+    environment:
+      IDENTITY_RUNTIME_DIR: /runtime
+      IDENTITY_PUBLIC_ORIGIN: ${IDENTITY_PUBLIC_ORIGIN:?}
+      IDENTITY_ENVIRONMENT: ${IDENTITY_ENVIRONMENT:-production}
+      IDENTITY_WEBAUTHN_RP_ID: ${IDENTITY_WEBAUTHN_RP_ID:?}
+      IDENTITY_BOOTSTRAP_EMAIL: ${IDENTITY_BOOTSTRAP_EMAIL:?}
+      IDENTITY_ADMIN_SECRET_FILE: /run/secrets/admin_client
+      IDENTITY_ACCOUNT_SECRET_FILE: /run/secrets/account_client
+      IDENTITY_SYNC_SECRET_FILE: /run/secrets/sync_client
+      BREVO_SMTP_LOGIN_FILE: /run/secrets/smtp_login
+      BREVO_SMTP_KEY_FILE: /run/secrets/smtp_key
+      BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:?}
+      BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-SCORETech Identity}
+      IDENTITY_TERMS_URL: ${IDENTITY_TERMS_URL:?}
+      IDENTITY_TERMS_VERSION: ${IDENTITY_TERMS_VERSION:?}
+      IDENTITY_TERMS_DIGEST: ${IDENTITY_TERMS_DIGEST:?}
+      IDENTITY_PRIVACY_URL: ${IDENTITY_PRIVACY_URL:?}
+      IDENTITY_PRIVACY_VERSION: ${IDENTITY_PRIVACY_VERSION:?}
+      IDENTITY_PRIVACY_DIGEST: ${IDENTITY_PRIVACY_DIGEST:?}
+    secrets: [admin_client, account_client, sync_client, smtp_login, smtp_key]
+    volumes: ['${IDENTITY_RUNTIME_PATH:-./.identity-runtime}:/runtime']
+  database:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment: {POSTGRES_DB: keycloak, POSTGRES_USER: keycloak, POSTGRES_PASSWORD_FILE: /run/secrets/database_password}
+    secrets: [database_password]
+    volumes: [identity-database:/var/lib/postgresql]
+    healthcheck: {test: [CMD-SHELL, pg_isready -U keycloak -d keycloak], interval: 5s, retries: 30}
+  keycloak:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-provider:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    restart: unless-stopped
+    mem_limit: ${IDENTITY_PROVIDER_MEMORY:-2g}
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://database:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD_FILE: /run/secrets/database_password
+      KC_BOOTSTRAP_ADMIN_USERNAME: identity-operator
+      KC_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/secrets/bootstrap_password
+      KC_HOSTNAME: ${IDENTITY_PUBLIC_ORIGIN:?}/identity/auth
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+    secrets: [database_password, bootstrap_password]
+    command: [start, --optimized, --import-realm]
+    volumes: ['${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/import:/opt/keycloak/data/import:ro']
+    depends_on: {render: {condition: service_completed_successfully}, database: {condition: service_healthy}}
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000; printf \"GET /health/ready HTTP/1.0\\r\\n\\r\\n\" >&3; IFS= read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+  realm-setup:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    command: [node, tooling/configure-realm.mjs]
+    environment:
+      <<: *api-env
+      IDENTITY_RUNTIME_DIR: /runtime
+      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-config-sync
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/sync_client
+    secrets: [sync_client]
+    volumes:
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}:/runtime:ro
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/coordination:/runtime/coordination
+    depends_on: {keycloak: {condition: service_healthy}}
+  catalogue-seed:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    command: [node, tooling/seed-catalogue.mjs]
+    environment:
+      <<: [*api-env, *github-env]
+      IDENTITY_RUNTIME_DIR: /runtime
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/admin_client
+    secrets: [admin_client, github_key]
+    volumes: ['${IDENTITY_RUNTIME_PATH:-./.identity-runtime}:/runtime:ro']
+    depends_on: {render: {condition: service_completed_successfully}}
+  config-sync:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-tooling:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    restart: unless-stopped
+    command: [node, tooling/sync-catalogue.mjs, --watch]
+    environment:
+      <<: [*api-env, *github-env]
+      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-config-sync
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/sync_client
+      IDENTITY_SYNC_INTERVAL_MS: '15000'
+    secrets: [sync_client, github_key]
+    volumes:
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/catalogue:/runtime/catalogue
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/coordination:/runtime/coordination
+    depends_on: {realm-setup: {condition: service_completed_successfully}, catalogue-seed: {condition: service_completed_successfully}}
+    healthcheck: {test: [CMD, node, -e, "const fs=require('fs');try{process.exit(JSON.parse(fs.readFileSync('/runtime/catalogue/apply-status.json')).state==='applied'?0:1)}catch{process.exit(1)}"], interval: 10s, retries: 30}
+  account-api:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-account:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    restart: unless-stopped
+    command: [node, apps/account-api/dist/main/main.js]
+    environment:
+      <<: *api-env
+      APP_AVATAR_DIRECTORY: /var/lib/identity-avatars
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-account-service
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/account_client
+    secrets: [account_client]
+    volumes: ['${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/catalogue:/runtime/catalogue:ro', identity-avatars:/var/lib/identity-avatars]
+    depends_on: {config-sync: {condition: service_healthy}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, retries: 20}
+  admin-api:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-admin:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    restart: unless-stopped
+    command: [node, apps/admin-api/dist/main/main.js]
+    environment:
+      <<: [*api-env, *github-env]
+      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-admin-service
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET_FILE: /run/secrets/admin_client
+    secrets: [admin_client, github_key]
+    volumes:
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/catalogue:/runtime/catalogue:ro
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/coordination:/runtime/coordination
+    depends_on: {config-sync: {condition: service_healthy}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 10s, retries: 20}
+  gateway:
+    image: ${IDENTITY_IMAGE_PREFIX:-ghcr.io/scorelabus/scoretech-identity}-gateway:${IDENTITY_VERSION:-main}
+    pull_policy: always
+    restart: unless-stopped
+    ports: ['127.0.0.1:${IDENTITY_GATEWAY_PORT:-18010}:8080']
+    networks:
+      default:
+      sphere:
+        aliases: ['${IDENTITY_GATEWAY_ALIAS:-scoretech-identity-gateway}']
+    volumes:
+      - ${IDENTITY_RUNTIME_PATH:-./.identity-runtime}/web:/runtime/web:ro
+    depends_on: {account-api: {condition: service_healthy}, admin-api: {condition: service_healthy}}
+    healthcheck: {test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/identity/account/], interval: 5s, retries: 20}
+# Compose materializes these .env values as files only for the services that need them.
+secrets:
+  database_password: {environment: IDENTITY_DATABASE_PASSWORD}
+  bootstrap_password: {environment: IDENTITY_BOOTSTRAP_PASSWORD}
+  admin_client: {environment: IDENTITY_ADMIN_CLIENT_SECRET}
+  account_client: {environment: IDENTITY_ACCOUNT_CLIENT_SECRET}
+  sync_client: {environment: IDENTITY_SYNC_CLIENT_SECRET}
+  github_key: {file: '${IDENTITY_GITHUB_KEY_FILE:?Set IDENTITY_GITHUB_KEY_FILE to the GitHub App PEM file}'}
+  smtp_login: {environment: BREVO_SMTP_LOGIN}
+  smtp_key: {environment: BREVO_SMTP_KEY}
+networks:
+  sphere:
+    external: true
+    name: ${SPHERE_DOCKER_NETWORK:-production_sphere-network}
+volumes:
+  identity-avatars:
+  identity-database:

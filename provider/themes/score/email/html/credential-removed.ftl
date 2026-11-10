@@ -1,0 +1,1 @@
+<#import "template.ftl" as layout><@layout.emailLayout><h1>Sign-in method removed</h1><p>A sign-in method (${method}) was removed from your account through support.</p><p>If you did not request this action, contact SCORETech Identity support immediately.</p></@layout.emailLayout>

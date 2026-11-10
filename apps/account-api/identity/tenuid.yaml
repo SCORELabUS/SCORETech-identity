@@ -1,0 +1,24 @@
+---
+apiVersion: identity.tentuplaza.es/v1alpha2
+kind: TenTuIdIntegration
+metadata:
+  name: identity-account-api
+spec:
+  resources:
+  - audience: identity-account-api
+  clients:
+  - clientId: identity-account-service
+    type: confidential
+    audiences:
+    - realm-management
+    serviceAccounts: true
+    secretManagement: external-secrets
+    secretEnv: IDENTITY_ACCOUNT_CLIENT_SECRET
+    secretRef:
+      name: identity-account-service
+      key: client-secret
+    serviceAccountRoles:
+      realm-management:
+      - view-users
+      - manage-users
+      - view-events

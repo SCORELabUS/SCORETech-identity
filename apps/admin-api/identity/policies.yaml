@@ -1,0 +1,119 @@
+{
+  "apiVersion": "identity.tentuplaza.es/v1alpha2",
+  "kind": "TenTuIdPolicies",
+  "metadata": {
+    "name": "identity-admin-api"
+  },
+  "spec": {
+    "entry": {
+      "permission": "admin-web:{environment}:access"
+    },
+    "operations": {
+      "identity.users.view": {
+        "permission": "identity:users:view"
+      },
+      "identity.users.create": {
+        "permission": "identity:users:create"
+      },
+      "identity.users.update.name": {
+        "permission": "identity:users:update:name"
+      },
+      "identity.users.update.email": {
+        "permission": "identity:users:update:email"
+      },
+      "identity.users.update.password": {
+        "permission": "identity:users:update:password"
+      },
+      "identity.users.update.roles": {
+        "permission": "identity:users:update:roles"
+      },
+      "identity.users.update.groups": {
+        "permission": "identity:users:update:groups"
+      },
+      "identity.users.activate": {
+        "permission": "identity:users:activate"
+      },
+      "identity.users.credentials.view": {
+        "permission": "identity:users:credentials:view"
+      },
+      "identity.users.credentials.delete": {
+        "permission": "identity:users:credentials:delete"
+      },
+      "identity.users.deactivate": {
+        "permission": "identity:users:deactivate"
+      },
+      "identity.users.delete": {
+        "permission": "identity:users:delete"
+      },
+      "identity.users.send-verification": {
+        "permission": "identity:users:send-verification"
+      },
+      "identity.users.send-password-reset": {
+        "permission": "identity:users:send-password-reset"
+      },
+      "identity.users.logout": {
+        "permission": "identity:users:logout"
+      },
+      "identity.roles.view": {
+        "permission": "identity:roles:view"
+      },
+      "identity.roles.manage": {
+        "permission": "identity:roles:manage"
+      },
+      "identity.groups.view": {
+        "permission": "identity:groups:view"
+      },
+      "identity.groups.manage": {
+        "permission": "identity:groups:manage"
+      },
+      "identity.invitations.view": {
+        "permission": "identity:invitations:view"
+      },
+      "identity.invitations.create": {
+        "permission": "identity:invitations:create"
+      },
+      "identity.invitations.update": {
+        "permission": "identity:invitations:update"
+      },
+      "identity.invitations.revoke": {
+        "permission": "identity:invitations:revoke"
+      },
+      "identity.invitations.delete": {
+        "permission": "identity:invitations:delete"
+      },
+      "identity.users.recovery.create": {
+        "permission": "identity:users:recovery:create"
+      },
+      "identity.users.recovery.revoke": {
+        "permission": "identity:users:recovery:revoke"
+      },
+      "identity.users.recovery.view": {
+        "permission": "identity:users:recovery:view"
+      },
+      "identity.legal.campaigns.view": {
+        "permission": "identity:legal:campaigns:view"
+      },
+      "identity.legal.campaigns.create": {
+        "permission": "identity:legal:campaigns:create"
+      },
+      "identity.legal.campaigns.update": {
+        "permission": "identity:legal:campaigns:update"
+      },
+      "identity.legal.campaigns.activate": {
+        "permission": "identity:legal:campaigns:activate"
+      },
+      "identity.legal.campaigns.cancel": {
+        "permission": "identity:legal:campaigns:cancel"
+      },
+      "identity.legal.deliveries.retry": {
+        "permission": "identity:legal:deliveries:retry"
+      },
+      "identity.legal.evidence.view": {
+        "permission": "identity:legal:evidence:view"
+      },
+      "identity.legal.closures.manage": {
+        "permission": "identity:legal:closures:manage"
+      }
+    }
+  }
+}

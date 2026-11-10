@@ -1,0 +1,125 @@
+name: scoretech-identity-lab
+x-config: &config
+  APP_KEYCLOAK_ISSUER: http://localhost:${IDENTITY_LAB_PORT:-18000}/identity/auth/realms/score
+  APP_KEYCLOAK_TRANSPORT_URL: http://keycloak:8080/identity/auth/realms/score
+  APP_KEYCLOAK_ADMIN_URL: http://keycloak:8080/identity/auth
+  APP_KEYCLOAK_REALM: score
+  APP_CORS_ORIGINS: http://localhost:${IDENTITY_LAB_PORT:-18000}
+  APP_REQUIRE_ADMIN_PASSKEY: 'true'
+  APP_IDENTITY_ENVIRONMENT: local
+  APP_ACCOUNT_PUBLIC_URL: http://localhost:${IDENTITY_LAB_PORT:-18000}/identity/account/
+  APP_AUTHORIZATION_CATALOGUE_PATH: /runtime/catalogue/catalogue.json
+  APP_CATALOGUE_STATE_PATH: /runtime/catalogue/apply-status.json
+  APP_GITHUB_API_URL: http://catalogue-fixture:8090
+  APP_GITHUB_APP_ID: '1'
+  APP_GITHUB_INSTALLATION_ID: '1'
+  APP_GITHUB_PRIVATE_KEY_FILE: /runtime/keys/github.pem
+  APP_CATALOGUE_REPO: SCORELabUS/SCORETech-identity
+  APP_CATALOGUE_BRANCH: identity-catalogue
+services:
+  prepare:
+    image: scoretech-identity-tooling:local
+    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: tooling}
+    environment:
+      IDENTITY_RUNTIME_DIR: /runtime
+      IDENTITY_PUBLIC_ORIGIN: http://localhost:${IDENTITY_LAB_PORT:-18000}
+    volumes: [./.lab:/runtime]
+  database:
+    image: postgres:18-alpine
+    environment: {POSTGRES_DB: keycloak, POSTGRES_USER: keycloak, POSTGRES_PASSWORD: fixture-local-only}
+    volumes: [identity-database:/var/lib/postgresql]
+    healthcheck: {test: [CMD-SHELL, pg_isready -U keycloak -d keycloak], interval: 3s, timeout: 3s, retries: 40}
+  mail:
+    image: axllent/mailpit:v1.27.8
+    ports: ['127.0.0.1:18025:8025']
+  keycloak:
+    mem_limit: ${IDENTITY_PROVIDER_MEMORY:-2g}
+    image: scoretech-identity-provider:local
+    build: {context: ., dockerfile: provider/Dockerfile}
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://database:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: fixture-local-only
+      KC_BOOTSTRAP_ADMIN_USERNAME: fixture-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: fixture-local-only
+      KC_HOSTNAME: http://localhost:${IDENTITY_LAB_PORT:-18000}/identity/auth
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+    command: [start, --optimized, --import-realm]
+    volumes: [./.lab/import:/opt/keycloak/data/import:ro]
+    depends_on: {prepare: {condition: service_completed_successfully}, database: {condition: service_healthy}, mail: {condition: service_started}}
+    healthcheck:
+      test: [CMD-SHELL, "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000; printf \"GET /health/ready HTTP/1.0\\r\\n\\r\\n\" >&3; IFS= read -r status <&3; [[ \"$$status\" == *\" 200 \"* ]]'"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 25s
+  catalogue-fixture:
+    image: scoretech-identity-tooling:local
+    command: [node, tooling/catalogue-fixture.mjs]
+    environment: {IDENTITY_RUNTIME_DIR: /runtime}
+    volumes: [./.lab:/runtime]
+    depends_on: {prepare: {condition: service_completed_successfully}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 3s, retries: 30}
+  bootstrap:
+    image: scoretech-identity-tooling:local
+    command: [node, tooling/bootstrap-lab.mjs]
+    environment: {APP_IDENTITY_ENVIRONMENT: local, APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock}
+    volumes:
+      - ./.lab/import:/runtime/import:ro
+      - ./.lab/coordination:/runtime/coordination
+    depends_on: {keycloak: {condition: service_healthy}}
+  config-sync:
+    image: scoretech-identity-tooling:local
+    command: [node, tooling/sync-catalogue.mjs, --watch]
+    environment:
+      <<: *config
+      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-config-sync
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET: fixture-local-config-sync
+    volumes: [./.lab:/runtime]
+    depends_on: {bootstrap: {condition: service_completed_successfully}, catalogue-fixture: {condition: service_healthy}}
+    healthcheck: {test: [CMD, node, -e, "const fs=require('fs');try{process.exit(JSON.parse(fs.readFileSync('/runtime/catalogue/apply-status.json')).state==='applied'?0:1)}catch{process.exit(1)}"], interval: 5s, retries: 30}
+  account-api:
+    image: scoretech-identity-api:local
+    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: api}
+    command: [node, apps/account-api/dist/main/main.js]
+    environment:
+      <<: *config
+      APP_AVATAR_DIRECTORY: /var/lib/identity-avatars
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-account-service
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET: fixture-local-account-service
+    volumes: [./.lab:/runtime:ro, identity-avatars:/var/lib/identity-avatars]
+    depends_on: {config-sync: {condition: service_healthy}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 5s, retries: 20}
+  admin-api:
+    image: scoretech-identity-api:local
+    command: [node, apps/admin-api/dist/main/main.js]
+    environment:
+      <<: *config
+      APP_AUTHORIZATION_LOCK_FILE: /runtime/coordination/authorization.lock
+      APP_KEYCLOAK_ADMIN_CLIENT_ID: identity-admin-service
+      APP_KEYCLOAK_ADMIN_CLIENT_SECRET: fixture-local-admin-service
+    volumes:
+      - ./.lab:/runtime:ro
+      - ./.lab/coordination:/runtime/coordination
+    depends_on: {config-sync: {condition: service_healthy}}
+    healthcheck: {test: [CMD, node, -e, "fetch('http://localhost:8080/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"], interval: 5s, retries: 20}
+  gateway:
+    image: scoretech-identity-web:local
+    build: {context: ., dockerfile: deploy/Runtime.Dockerfile, target: web}
+    ports: ['127.0.0.1:${IDENTITY_LAB_PORT:-18000}:18000']
+    volumes: [./.lab/web:/runtime/web:ro]
+    depends_on: {account-api: {condition: service_healthy}, admin-api: {condition: service_healthy}, keycloak: {condition: service_healthy}}
+    healthcheck: {test: [CMD, wget, -q, --spider, http://127.0.0.1:18000/identity/account/], interval: 5s, retries: 20}
+  checks:
+    image: scoretech-identity-tooling:local
+    command: [sh, -c, 'node --test tests/unit/*.test.mjs && node tooling/smoke.mjs']
+    profiles: [tools]
+    environment: {SMOKE_ORIGIN: http://gateway:18000}
+    depends_on: {gateway: {condition: service_healthy}}
+volumes:
+  identity-avatars:
+  identity-database:

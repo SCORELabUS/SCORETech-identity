@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/target
+**/dist
+.lab
+**/.env
+**/.env.*
+**/coverage
+**/test-results
+**/*.log
+.identity-runtime
+
+.identity-staging-runtime/
+**/secrets/

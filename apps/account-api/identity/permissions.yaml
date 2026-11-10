@@ -1,0 +1,7 @@
+---
+apiVersion: identity.tentuplaza.es/v1alpha2
+kind: TenTuIdPermissions
+metadata:
+  name: identity-account-api
+spec:
+  permissions: []

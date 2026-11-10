@@ -1,0 +1,14 @@
+{
+  "apiVersion": "identity.tentuplaza.es/v1alpha2",
+  "kind": "TenTuIdPolicies",
+  "metadata": {
+    "name": "identity-account-api"
+  },
+  "spec": {
+    "entry": {
+      "authenticated": true
+    },
+    "operations": {
+    }
+  }
+}

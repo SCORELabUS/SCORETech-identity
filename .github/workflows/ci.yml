@@ -1,0 +1,52 @@
+name: Identity laboratory
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # The root test process and the runner share the same installed browsers.
+      PLAYWRIGHT_BROWSERS_PATH: /tmp/identity-playwright
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm exec playwright install --with-deps chromium
+      # The provider Docker build includes its Java regression suite.
+      - run: ./lab up
+      - run: ./lab check
+      # Lab secrets deliberately belong to container UID 1000 (0600/0700).
+      # Hosted runners use another UID. Privileged fixture tests can read them
+      # without widening permissions or changing the API/provider ownership.
+      - run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e
+      - run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e:sso
+      - run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e:session
+      - run: sudo env "PATH=$PATH" "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH" IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e:profile
+      - if: always()
+        run: ./lab logs
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity-browser-checks
+          path: test-results/
+          if-no-files-found: ignore
+      - if: always()
+        run: ./lab down
+  publish:
+    name: Publish main images
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      packages: write
+    uses: ./.github/workflows/publish-images.yml

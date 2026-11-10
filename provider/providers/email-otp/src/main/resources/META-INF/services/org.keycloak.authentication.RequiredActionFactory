@@ -1,0 +1,9 @@
+es.tentuplaza.identity.emailotp.PasskeyRegistrationFactory
+es.tentuplaza.identity.emailotp.CredentialDeletionFactory
+es.tentuplaza.identity.emailotp.LatestUpdateEmail
+
+es.tentuplaza.identity.emailotp.BrokerAwareVerifyEmail
+
+es.tentuplaza.identity.emailotp.IdentityUnlinkFactory
+
+es.tentuplaza.identity.emailotp.AccountDeletionFactory
