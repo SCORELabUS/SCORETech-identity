@@ -288,8 +288,10 @@ that this project has configured a UMA resource server.
 ## Brevo transactional email
 
 Production rendering configures Keycloak's native SMTP connection to
-`smtp-relay.brevo.com:465` with TLS, using `brevo-smtp-login` and
-`brevo-smtp-key`. Set the authenticated sender email and the public sender name
+`smtp-relay.brevo.com:587` with STARTTLS by default, using the private
+`BREVO_SMTP_LOGIN` and `BREVO_SMTP_KEY` values mounted as secrets.
+`BREVO_SMTP_PORT` also accepts 2525 (STARTTLS) and 465 (implicit TLS). Set the
+authenticated sender email and the public sender name
 (`SCORETech Identity` by default). These are SCORETech Identity templates in English,
 not SPHERE password-reset templates.
 

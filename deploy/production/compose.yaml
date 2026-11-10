@@ -25,6 +25,7 @@ services:
       IDENTITY_SYNC_SECRET_FILE: /run/secrets/sync_client
       BREVO_SMTP_LOGIN_FILE: /run/secrets/smtp_login
       BREVO_SMTP_KEY_FILE: /run/secrets/smtp_key
+      BREVO_SMTP_PORT: ${BREVO_SMTP_PORT:-587}
       BREVO_SENDER_EMAIL: ${BREVO_SENDER_EMAIL:?}
       BREVO_SENDER_NAME: ${BREVO_SENDER_NAME:-SCORETech Identity}
     secrets: [admin_client, account_client, sync_client, smtp_login, smtp_key]

@@ -127,6 +127,8 @@ or rotates existing credentials. Edit that file and replace every placeholder:
 - `IDENTITY_VERSION=main`; keep the server repository on `main`.
 - Public origin and matching WebAuthn RP ID (initially `sphere.score.us.es`).
 - First operator email, Brevo SMTP login/key and authenticated sender.
+- `BREVO_SMTP_PORT=587` (default), using STARTTLS. Port 2525 also uses STARTTLS;
+  explicitly selecting 465 uses implicit TLS.
 - Existing SPHERE Docker network name. With SPHERE's current production Compose
   directory/project it is `production_sphere-network`; check `docker network ls`
   if a custom project name is used.
