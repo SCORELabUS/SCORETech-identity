@@ -598,7 +598,7 @@ paths:
       description: >-
         Writes one versioned desired revision for the configured environment with optimistic
         concurrency, current delegation checks and audit metadata. Conflicting base revisions return
-        409. Saved changes become effective only after synchronization is verified. Adding atomic
+        409. Changes and audit history become effective in one database transaction. Adding atomic
         permissions or changing accessRules additionally requires the live protected administrador
         role. Existing permissions cannot be removed, renamed, reassigned to another service
         namespace or have their description changed. The server derives the protected administrator
@@ -608,7 +608,7 @@ paths:
         for state applied and observedRevision equal to revision.revisions for this environment.
       responses:
         '201':
-          description: Desired revision saved. This does not confirm application in the identity provider.
+          description: Catalogue and authorization applied atomically with their database audit entry.
           content:
             application/json:
               schema:
@@ -633,7 +633,7 @@ paths:
               properties:
                 baseSha:
                   type: string
-                  pattern: ^[a-f0-9]{40}$
+                  pattern: ^[a-f0-9]{64}$
                 catalogue:
                   $ref: '#/components/schemas/CatalogueSchema'
                 reason:
@@ -668,7 +668,7 @@ paths:
         - identity:roles:manage
     get:
       operationId: get_v1_catalogue_revisions
-      summary: List versioned catalogue operations
+      summary: List audited database catalogue operations
       tags:
         - catalogue
       description:
@@ -706,10 +706,10 @@ paths:
       description:
         Writes one versioned desired revision for the configured environment with optimistic
         concurrency, current delegation checks and audit metadata. Conflicting base revisions return
-        409. Saved changes become effective only after synchronization is verified.
+        409. Changes and audit history become effective in one database transaction.
       responses:
         '201':
-          description: Desired revision saved. This does not confirm application in the identity provider.
+          description: Catalogue and authorization applied atomically with their database audit entry.
           content:
             application/json:
               schema:
@@ -734,7 +734,7 @@ paths:
               properties:
                 baseSha:
                   type: string
-                  pattern: ^[a-f0-9]{40}$
+                  pattern: ^[a-f0-9]{64}$
                 operationId:
                   type: string
                   pattern: ^[a-f0-9]{64}$
@@ -769,10 +769,8 @@ paths:
       tags:
         - catalogue
       description:
-        Returns this console environment only. Applied means the synchronizer verified the
-        selected revision in the provider; a saved commit or an older observed revision is not proof
-        of application. Failed or pending changes do not replace the last active assignment
-        projection.
+        Returns this console environment only. Applied means the database contains the
+        active database revision. Successful saves are immediately applied and audited.
       responses:
         '200':
           description: Successful response.
@@ -2758,7 +2756,7 @@ components:
       properties:
         baseSha:
           type: string
-          pattern: ^[a-f0-9]{40}$
+          pattern: ^[a-f0-9]{64}$
         environment:
           type: string
           enum:

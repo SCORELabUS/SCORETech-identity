@@ -45,7 +45,7 @@ const api = (code) =>
         ...compose,
         "exec",
         "-T",
-        "catalogue-fixture",
+        "account-api",
         "node",
         "--input-type=module",
         "-e",

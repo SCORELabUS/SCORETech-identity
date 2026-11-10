@@ -57,4 +57,17 @@
 <addUniqueConstraint tableName="TENTU_RECOVERY" columnNames="SESSION_HASH" constraintName="TENTU_RECOVERY_SESSION_UK"/>
 <createIndex tableName="TENTU_RECOVERY" indexName="TENTU_RECOVERY_USER_IDX"><column name="REALM_ID"/><column name="USER_ID"/></createIndex>
 </changeSet>
+<changeSet id="score-catalogue-1" author="scoretech">
+<createTable tableName="SCORE_CATALOGUE_REVISION">
+<column name="ID" type="varchar(64)"><constraints nullable="false" primaryKey="true"/></column>
+<column name="REALM_ID" type="varchar(36)"><constraints nullable="false"/></column>
+<column name="ENVIRONMENT" type="varchar(16)"><constraints nullable="false"/></column>
+<column name="CREATED_AT" type="bigint"><constraints nullable="false"/></column>
+<column name="ACTOR" type="varchar(200)"><constraints nullable="false"/></column>
+<column name="REASON" type="varchar(300)"><constraints nullable="false"/></column>
+<column name="OPERATION" type="varchar(16)"><constraints nullable="false"/></column>
+<column name="CATALOGUE" type="text"><constraints nullable="false"/></column>
+</createTable>
+<createIndex tableName="SCORE_CATALOGUE_REVISION" indexName="SCORE_CATALOGUE_HISTORY_IDX"><column name="REALM_ID"/><column name="CREATED_AT"/></createIndex>
+</changeSet>
 </databaseChangeLog>

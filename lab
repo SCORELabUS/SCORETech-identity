@@ -8,7 +8,7 @@ trap 'printf "SCORETech Identity command failed at line %s. Inspect: ./lab logs\
 case "${1:-up}" in
  up)
   docker info >/dev/null
-  compose up -d --build --wait --wait-timeout 300
+  compose up -d --build --remove-orphans --wait --wait-timeout 300
   lab_port="$(compose port gateway 18000)"
   lab_port="${lab_port##*:}"
   printf '\nSCORETech Identity is ready:\n  Account: http://localhost:%s/identity/account/\n  Admin:   http://localhost:%s/identity/admin/\n  Inbox:   http://localhost:18025\n\nUse admin-score@example.invalid, support@example.invalid or person@example.invalid.\nSign-in codes are captured in Inbox. Administrators must create a passkey.\n' "$lab_port" "$lab_port"

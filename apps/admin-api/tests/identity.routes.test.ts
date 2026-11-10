@@ -172,10 +172,13 @@ async function setup(permissions?: string[], assurance: Partial<Principal> = {})
     next();
   });
   app.use(
-    createIdentityRouter(client, logger, {
-      ...config,
-      APP_AUTHORIZATION_CATALOGUE_PATH: cataloguePath,
-    }),
+    createIdentityRouter(client, logger, config, async () => ({
+      environment: 'local' as const,
+      generation: 1,
+      revision: 'a'.repeat(64),
+      permissions: catalogue.permissions,
+      roles: catalogue.roles,
+    })),
   );
   app.use(errorHandler);
   const server = app.listen(0, '127.0.0.1');

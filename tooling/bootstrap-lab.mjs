@@ -62,6 +62,7 @@ try {
     displayName: realm.displayName,
     attributes: {
       ...currentRealm.attributes,
+      ...Object.fromEntries(Object.entries(realm.attributes).filter(([key]) => key.startsWith("tentu.legal."))),
       "tentu.registration.default-role":
         realm.attributes["tentu.registration.default-role"],
     },
@@ -119,6 +120,8 @@ try {
       "identity-account-web",
       "account",
       "account-console",
+      "identity-account-service",
+      "identity-admin-service",
       "lab-service-web",
     ].includes(c.clientId),
   )) {

@@ -6,6 +6,7 @@ COPY packages ./packages
 COPY apps ./apps
 COPY tooling ./tooling
 COPY config ./config
+COPY legal ./legal
 COPY tests ./tests
 RUN pnpm install --frozen-lockfile
 RUN pnpm -r build
@@ -22,10 +23,10 @@ CMD ["node", "apps/admin-api/dist/main/main.js"]
 FROM workspace AS tooling
 CMD ["node", "tooling/prepare-lab.mjs"]
 FROM workspace AS production-tooling
-RUN rm -f tooling/catalogue-fixture.mjs tooling/bootstrap-lab.mjs tooling/smoke.mjs && find apps packages -type d -name tests -prune -exec rm -rf '{}' +
+RUN rm -f tooling/bootstrap-lab.mjs tooling/smoke.mjs && find apps packages -type d -name tests -prune -exec rm -rf '{}' +
 RUN rm -rf tests
 USER node
-CMD ["node", "tooling/sync-catalogue.mjs", "--watch"]
+CMD ["node", "tooling/init-catalogue.mjs"]
 FROM nginx:1.28.0-alpine AS web
 COPY --from=workspace /app/apps/account-web/dist /usr/share/nginx/html/account
 COPY --from=workspace /app/apps/admin-web/dist /usr/share/nginx/html/admin

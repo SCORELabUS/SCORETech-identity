@@ -8,14 +8,6 @@ const config = loadConfig();
 const logger = createLogger(config.APP_LOG_LEVEL);
 const catalogue = new CatalogueService(config);
 const app = createApp(config, { logger, catalogue });
-if (catalogue.github.configured) {
-  try {
-    await catalogue.current();
-  } catch {
-    // Keep unrelated endpoints available; catalogue reads retry and fail closed.
-    logger.error('catalogue warmup failed');
-  }
-}
 const server = app.listen(config.APP_PORT, '0.0.0.0', () => {
   logger.info('http server listening', {
     port: config.APP_PORT,

@@ -296,7 +296,14 @@ it('refuses an administrative user creation before writing when member has gaine
     response.locals.identityEnvironment = 'local';
     next();
   });
-  app.use(createIdentityRouter(client as unknown as IdentityAdminClient, logger, config));
+  app.use(
+    createIdentityRouter(
+      client as unknown as IdentityAdminClient,
+      logger,
+      config,
+      async () => active,
+    ),
+  );
   app.use(errorHandler);
   const server = app.listen(0, '127.0.0.1');
   servers.push(server);

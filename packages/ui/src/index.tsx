@@ -550,6 +550,22 @@ export function Shell({
             Smart Computer Systems Research and Engineering · University of
             Seville
           </span>
+          <a
+            className="cursor-pointer"
+            href="/identity/legal/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Terms
+          </a>
+          <a
+            className="cursor-pointer"
+            href="/identity/legal/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Privacy
+          </a>
           <a className="cursor-pointer" href="https://score.us.es">
             SCORE Lab <ArrowUpRight size={13} />
           </a>

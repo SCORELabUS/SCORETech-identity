@@ -94,6 +94,8 @@ public final class AuthorizationResourceFactory implements RealmResourceProvider
     @PUT @Path("snapshot") @Consumes("application/json") @Produces("application/json")
     public Response put(Registry registry) {
       authorize(true);
+      if ("true".equals(session.getContext().getRealm().getAttribute("score.catalogue.database-managed")))
+        throw new ClientErrorException("Use the transactional database catalogue API", 409);
       validate(registry);
       var realm = session.getContext().getRealm();
       acquire(session, realm);

@@ -27,4 +27,4 @@ done < "$ROOT/docker/$environment/.env.example" > "$temporary"
 # ln fails rather than replacing a file if another setup process won the race.
 ln "$temporary" "$destination"
 mkdir -p -- "$ROOT/docker/$environment/secrets"
-printf 'Created %s with unique internal credentials.\nFill deployment/Brevo values and install the GitHub App PEM at docker/%s/secrets/github-app.pem before starting Compose.\n' "$destination" "$environment"
+printf 'Created %s with unique internal credentials.\nFill deployment/Brevo values before starting Compose.\n' "$destination"

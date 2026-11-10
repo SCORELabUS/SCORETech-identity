@@ -1,0 +1,176 @@
+{
+  "terms": {
+    "title": "Terms of service",
+    "updated": "2026-11-10",
+    "summary": "One identity for the SCORE ecosystem. These terms explain how to use your account, protect your sign-in methods and access connected services.",
+    "sections": [
+      [
+        "Service and operator",
+        [
+          "SCORETech Identity is the shared identity and single sign-on service operated by the SCORE Excellence Unit at the University of Seville. It provides registration, authentication, account settings and access management for participating SCORE services.",
+          "Contact the team at infoscore@us.es. These terms cover the identity service. Connected applications, including SPHERE and SPACE, manage their own features, resources and applicable service conditions."
+        ]
+      ],
+      [
+        "Your account",
+        [
+          "Provide accurate account information and keep your email address up to date. Public registration creates an identity account; access to restricted applications depends on the roles and permissions assigned by an administrator.",
+          "An identity account does not, by itself, grant administrative rights, membership of a research organization or access to private data in another application."
+        ]
+      ],
+      [
+        "Sign-in and security",
+        [
+          "Keep access to your email, passkeys, authenticator and recovery methods secure. Do not share sign-in codes or use another person’s account. Report suspected account misuse promptly to infoscore@us.es.",
+          "Sign-in may use email codes, passkeys, an authenticator or a connected external identity provider. Administration requires a passkey. We may require fresh authentication for sensitive actions and end sessions when security checks or session limits require it."
+        ]
+      ],
+      [
+        "Connected identities",
+        [
+          "You may connect supported external sign-in providers to your account. Linking must prove control of the accounts involved; matching email addresses alone do not authorize an account merge.",
+          "External providers operate under their own terms and privacy notices. Unlinking a provider requires another usable sign-in method and may require fresh verification."
+        ]
+      ],
+      [
+        "Acceptable use",
+        [
+          "Use the service lawfully and respect the rights and security of others. Do not impersonate another person, attempt unauthorized access, intercept credentials, introduce malicious software or deliberately disrupt the service.",
+          "Security research must be authorized and coordinated with the team. Report a vulnerability privately to infoscore@us.es without exposing credentials or other users’ data."
+        ]
+      ],
+      [
+        "Application access",
+        [
+          "Administrators can assign or remove roles and set the permissions required by each connected application. Applications remain responsible for enforcing their own authorization and protecting their resources.",
+          "A central sign-out ends the identity session. A connected application may also maintain a separate session; use its sign-out controls where necessary."
+        ]
+      ],
+      [
+        "Profile and personal data",
+        [
+          "Account and profile data are handled as described in the privacy policy at /identity/legal/privacy. Optional profile information is not automatically made public or shared with every connected application.",
+          "Provide only information you are entitled to use. You retain your rights in your profile and avatar; their processing is limited to operating the account and the services you choose to use."
+        ]
+      ],
+      [
+        "Availability and changes",
+        [
+          "We maintain and improve the service, but maintenance, incidents and external provider failures may interrupt access. No uninterrupted availability or particular service level is promised by these terms.",
+          "We may update functionality or temporarily restrict access to address security issues, misuse or operational requirements. These terms do not exclude responsibilities or rights that cannot lawfully be excluded."
+        ]
+      ],
+      [
+        "Closing an account",
+        [
+          "You can request account deletion from Account, subject to fresh authentication and the protections for administrative accounts. Contact infoscore@us.es if you need help.",
+          "Deleting the central identity does not automatically erase resources, organizations or records held by SPHERE, SPACE or other connected services. Follow the account and data procedures of each service. Security and administrative records may remain as described in the privacy policy."
+        ]
+      ],
+      [
+        "Software and intellectual property",
+        [
+          "Names, designs, software and materials remain subject to the rights of their owners and applicable open-source licences. Using the service grants no ownership over the service or other users’ information.",
+          "These terms do not restrict rights granted to you by an applicable software licence."
+        ]
+      ],
+      [
+        "Updates to these terms",
+        [
+          "The current terms are publicly available at /identity/legal/terms and show their last-updated date. Material changes will be communicated through the service or the account contact channel where appropriate."
+        ]
+      ],
+      [
+        "Applicable law and contact",
+        [
+          "The service operates within the University of Seville in Spain. Applicable Spanish and European Union law, including mandatory user and data protection rights, remains in force.",
+          "For questions about these terms or your account, contact infoscore@us.es."
+        ]
+      ]
+    ]
+  },
+  "privacy": {
+    "title": "Privacy policy",
+    "updated": "2026-11-10",
+    "summary": "How SCORETech Identity handles your account, sign-in methods and security information across the SCORE ecosystem.",
+    "sections": [
+      [
+        "Who is responsible",
+        [
+          "The responsible institution is the University of Seville, through its SCORE Excellence Unit, which operates SCORETech Identity. For privacy enquiries and requests concerning this service, contact infoscore@us.es.",
+          "This notice concerns the shared identity service. SPHERE, SPACE and other connected services process their own application data under their respective privacy information."
+        ]
+      ],
+      [
+        "Information we process",
+        [
+          "Account information includes your email address, name, account identifier, verification status, administrative roles and application permissions. You may optionally provide a phone number, profile details, social links and an avatar.",
+          "Authentication information includes passkey public-key credentials, authenticator configuration, email-code verification state and connected-provider identifiers. Passkey private keys remain with your authenticator; the service does not receive device biometric templates.",
+          "Operational information includes session identifiers, IP addresses, browser or device information where available, sign-in events, invitations, recovery activity and administrative audit records."
+        ]
+      ],
+      [
+        "Why we process it",
+        [
+          "We use this information to register and authenticate accounts, provide single sign-on, apply access permissions, let you manage your account, deliver transactional messages, provide support and investigate security incidents or misuse.",
+          "The institutional account and security processing supports the University’s public-interest research and service tasks (Article 6(1)(e) GDPR). Processing required by a specific legal obligation is based on Article 6(1)(c). Optional profile fields and provider connections are supplied at your choice and can be removed through the account controls.",
+          "The service does not use identity data for advertising, sell personal data or make your profile public by default. Acknowledging this privacy notice is not a separate consent to marketing."
+        ]
+      ],
+      [
+        "Signing in with Google or the University",
+        [
+          "When you choose an external provider, it authenticates you and returns the identifiers and profile information needed for the connection, such as a provider account identifier, name and email where supplied. The provider may receive technical information about your sign-in request.",
+          "Passwords used at Google or the University are entered at that provider and are not collected by SCORETech Identity. External providers apply their own privacy information. An external sign-in does not automatically merge accounts or grant application permissions."
+        ]
+      ],
+      [
+        "Connected services and recipients",
+        [
+          "A connected application receives the identity claims and permissions configured for its sign-in integration. These may include a stable account identifier, name, email, roles or application-specific permissions. Optional profile fields are not automatically included in every token.",
+          "Authorized administrators can access the account and security information needed for their duties. Brevo is used to deliver transactional email and receives the recipient address and message content, including temporary sign-in codes when applicable.",
+          "Infrastructure and external-provider processing is subject to the applicable institutional arrangements. Any international transfers must follow the safeguards required by data protection law."
+        ]
+      ],
+      [
+        "Cookies and browser storage",
+        [
+          "The identity provider uses cookies to maintain authentication and protect sign-in flows. Account and Admin use browser storage for their own session state and interface preferences.",
+          "These mechanisms support authentication, security and the requested interface. The identity service does not add advertising trackers or analytics cookies. Connected applications and external providers may have separate storage policies."
+        ]
+      ],
+      [
+        "How long data is kept",
+        [
+          "Account information remains while the account exists. The current implementation does not automatically delete accounts after a period of inactivity. Account deletion removes the central identity record, subject to the safeguards described in the account controls.",
+          "Sign-in sessions and temporary authentication data have technical expiry limits. A session expiring does not delete the account.",
+          "Security events and administrative audit records are stored separately. The current deployment does not configure an automatic deletion period for these records or catalogue revision history; they may remain after an account is removed to support security investigation and accountability. Contact infoscore@us.es about retention or erasure requests.",
+          "Backup and infrastructure-log retention depends on the operational policy of the hosting system. This notice does not promise an automatic backup deletion period that the identity application does not implement.",
+          "Uploaded avatar files are held in private storage separately from the identity database. Removing or changing a photo attempts to delete the previous file, but native account deletion does not automatically purge residual upload files. Contact infoscore@us.es to request removal of retained uploads."
+        ]
+      ],
+      [
+        "Your choices and rights",
+        [
+          "You can edit supported profile fields, manage connected identities, review sessions and manage sign-in methods from Account. Removing a sign-in method requires a usable alternative.",
+          "You may request access, rectification, erasure, restriction, objection and portability where applicable under data protection law. Contact infoscore@us.es; we may need proportionate verification before disclosing or changing account data.",
+          "You may also complain to the competent supervisory authority. Information about exercising rights and complaints is available at https://www.aepd.es. Deleting an identity does not automatically remove data held by a connected service."
+        ]
+      ],
+      [
+        "Security",
+        [
+          "We use access controls, encrypted public connections, protected service credentials and checks on sensitive actions to protect account information. Administrative access requires a passkey.",
+          "No system can guarantee absolute security. Notify infoscore@us.es if you suspect an account compromise or disclosure. Do not send passwords, sign-in codes or recovery secrets by email."
+        ]
+      ],
+      [
+        "Changes and contact",
+        [
+          "The current policy is publicly available at /identity/legal/privacy and includes its last-updated date. Material changes will be communicated where appropriate.",
+          "For account support, privacy questions or data protection requests, contact the SCORE Excellence Unit at infoscore@us.es."
+        ]
+      ]
+    ]
+  }
+}

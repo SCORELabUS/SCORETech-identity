@@ -9,3 +9,5 @@ export * from './account-client.js';
 export * from './device.js';
 export * from './environment.js';
 export * from './coordination.js';
+
+export { ProviderCatalogueClient } from './catalogue-client.js';

@@ -21,7 +21,8 @@
     "provider:test": "mvn --batch-mode --no-transfer-progress -f provider/providers/email-otp/pom.xml test",
     "test:e2e:sso": "node tests/e2e/external-sso.mjs",
     "test:e2e:session": "node tests/e2e/session-resume.mjs",
-    "test:e2e:profile": "node tests/e2e/account-profile.mjs"
+    "test:e2e:profile": "node tests/e2e/account-profile.mjs",
+    "test:e2e:catalogue": "node tests/e2e/native-catalogue.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

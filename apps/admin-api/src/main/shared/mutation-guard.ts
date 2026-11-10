@@ -7,37 +7,6 @@ import {
 } from '@scoretech/identity-internal';
 import type { AppConfig } from '../config/app-config.js';
 import { identityServiceAccess } from './identity-policies.js';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-
-export function assertAppliedAuthorization(config: AppConfig): void {
-  try {
-    const state = JSON.parse(readFileSync(config.APP_CATALOGUE_STATE_PATH, 'utf8')) as {
-      state?: string;
-      observedRevision?: string;
-    };
-    const active = JSON.parse(
-      readFileSync(
-        join(dirname(config.APP_AUTHORIZATION_CATALOGUE_PATH), 'active-registry.json'),
-        'utf8',
-      ),
-    ) as { revision?: string };
-    if (
-      state.state === 'applied' &&
-      typeof active.revision === 'string' &&
-      /^[a-f0-9]{64}$/.test(active.revision) &&
-      state.observedRevision === active.revision
-    )
-      return;
-  } catch {
-    /* A missing or partial projection is never authority. */
-  }
-  throw new HttpError(
-    503,
-    'catalogue_not_applied',
-    'Wait until the authorization catalogue is applied and verified.',
-  );
-}
 
 // Shared by every Admin API app in this process. Multiple API processes require
 // cross-process coordination before deployment; an instance-local queue is unsafe.
@@ -138,11 +107,6 @@ export const createAdministrativeMutationGuard = (
             releaseExternal();
             releaseLocal();
           };
-          // Reconciliation marks applying BEFORE native changes. If it dies or
-          // verification fails, grants stay blocked. Catalogue repair remains
-          // available, using its own non-escalation checks and the same lock.
-          if (config.APP_AUTHORIZATION_LOCK_FILE && !request.path.startsWith('/catalogue/'))
-            assertAppliedAuthorization(config);
           if (response.destroyed || response.writableEnded) {
             responseEnded = true;
             complete();

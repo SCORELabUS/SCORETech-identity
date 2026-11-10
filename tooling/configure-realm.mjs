@@ -94,6 +94,8 @@ try {
       "identity-account-web",
       "account",
       "account-console",
+      "identity-account-service",
+      "identity-admin-service",
     ].includes(client.clientId),
   )) {
     const [existing] = await call(

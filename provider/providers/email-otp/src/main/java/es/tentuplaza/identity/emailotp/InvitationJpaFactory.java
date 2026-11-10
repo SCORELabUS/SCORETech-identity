@@ -7,7 +7,7 @@ public final class InvitationJpaFactory implements JpaEntityProviderFactory {
   public String getId() { return "tentu-invitations"; }
   public JpaEntityProvider create(KeycloakSession session) {
     return new JpaEntityProvider() {
-      public List<Class<?>> getEntities() { return List.of(InvitationEntity.class, InvitationRedemptionEntity.class, RecoveryEntity.class); }
+      public List<Class<?>> getEntities() { return List.of(InvitationEntity.class, InvitationRedemptionEntity.class, RecoveryEntity.class, CatalogueRevisionEntity.class); }
       public String getChangelogLocation() { return "META-INF/tentu-invitations-changelog.xml"; }
       public String getFactoryId() { return "tentu-invitations"; }
       public void close() { }
