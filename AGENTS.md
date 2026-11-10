@@ -129,6 +129,21 @@ drags as outside clicks. Destructive actions require confirmation. The role revi
 history is a native disclosure, closed by default. The avatar menu retains My
 profile and red Sign out; Account shows Administration only for the live Admin role.
 
+## Image publication
+
+`ci.yml` calls `.github/workflows/publish-images.yml` only after verification of a
+push to `main`. Keep that gate and the reusable workflow's event/head checks.
+The hosted-runner browser steps use sudo with an explicit shared Playwright path
+to read UID-1000 lab fixtures; preserve 0600/0700 ownership rather than opening
+those files to every host user.
+GHCR artifacts are provider, account, admin, gateway and tooling, each tagged
+`main` and `sha-<full source SHA>` for amd64/arm64. Production/staging pull these
+artifacts without source builds; the development lab still builds locally.
+Keep runtime secret material out of build contexts, matrix inputs and cache.
+Do not publish or deploy an incomplete artifact set or silently move production
+to a different source/image revision. Actual GHCR execution needs a verified main
+push; local Docker builds are not proof that publication ran on GitHub.
+
 ## Secrets, deployment and state preservation
 
 Never commit `.lab/`, `.identity-runtime/`, `.identity-staging-runtime/`, `secrets/`, `.env` files with credentials, database

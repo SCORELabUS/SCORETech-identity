@@ -3,7 +3,7 @@
 Use Docker Engine with Compose **2.20 or later**. Run commands in the specified
 directory; Compose includes the existing deployment definitions and resolves build
 and bind paths from the repository root. Node, Java and pnpm are not required on
-the host. Allocate at least 2 GB to Keycloak alone; measure capacity alongside
+the host. The one-time setup helper uses Bash and OpenSSL. Allocate at least 2 GB to Keycloak alone; measure capacity alongside
 SPHERE's existing services before sizing the shared machine.
 
 | Environment | Directory | State | Public gateway / inbox |
@@ -39,9 +39,65 @@ Use `admin-score@example.invalid`, `support@example.invalid` or
 passkey. Optional lab settings are in `docker/development/.env.example`.
 Existing `.lab/external-sso.json` is retained, including private Google settings.
 
+## GHCR publication after a verified push to main
+
+`ci.yml` calls `publish-images.yml` only after its complete verification job passes
+for a push to `main`. Pull requests and `develop` do not publish. The reusable
+workflow builds the exact verified commit for `linux/amd64` and `linux/arm64`,
+uses the automatic `GITHUB_TOKEN` with `contents: read` / `packages: write`, and
+pins its GitHub/Docker actions to verified commit SHAs. No production credentials
+or SSH access are needed by the publishing workflow.
+
+| Image | Purpose |
+| --- | --- |
+| `ghcr.io/scorelabus/scoretech-identity-provider` | Custom Keycloak, themes and Java providers |
+| `ghcr.io/scorelabus/scoretech-identity-account` | Account API with its own default command |
+| `ghcr.io/scorelabus/scoretech-identity-admin` | Admin API with its own default command |
+| `ghcr.io/scorelabus/scoretech-identity-gateway` | Account/Admin web applications and production Nginx |
+| `ghcr.io/scorelabus/scoretech-identity-tooling` | Render, realm setup, catalogue seeding and synchronization |
+
+Account and Admin web assets continue using the shared gateway; this preserves the
+existing single-origin architecture. All five images receive `main` and
+`sha-<full 40-character commit SHA>` tags. Publication is serialized; verified
+commits superseded by a newer main revision are skipped. Wait for **all five**
+publish jobs to pass before deploying a release. A partial publish is not a
+complete release; rerun failed jobs for that main revision while it remains HEAD.
+
+In GitHub, allow GitHub Actions to publish repository packages under the
+organization's policies. The workflow requests the required token permissions.
+After the first publication, choose public visibility for each package if anonymous
+pulls are wanted. Public source code does not automatically make GHCR packages
+public. Otherwise log in on the server using a GitHub account/token with
+`read:packages` and access to these packages:
+
+```bash
+docker login ghcr.io --username YOUR_GITHUB_USER
+```
+
+Paste the read token only at the password prompt. The runtime GitHub App used for
+catalogue editing is a separate credential; it is not replaced by `GITHUB_TOKEN`.
+If a package already existed outside this workflow, connect it to this repository
+and grant its Actions workflows access before publishing.
+
+For production, copy the verified release SHA from Actions, check out that exact
+source revision, and set `IDENTITY_VERSION=sha-<that full SHA>` in the private env.
+The checked-out Compose/configuration and the image tag must refer to the same
+release. `main` is available as a moving tag for staging or deliberate tracking.
+`IDENTITY_IMAGE_PREFIX` changes the registry/namespace when necessary.
+
+Production/staging Compose contains no source builds. Gateway configuration is
+inside the published gateway image. Initializers use the published tooling image.
+The development lab retains its source builds and private local state.
+
 ## Production: configure once, then Compose
 
-From the repository root:
+First merge the reviewed Identity release into `main` and wait for CI and all
+five GHCR jobs to finish. On the server, clone/check out that published commit.
+The SPHERE integration must also be present in the deployed SPHERE release
+([PR #205](https://github.com/SCORELabUS/SPHERE/pull/205), targeting `develop`).
+Do not switch production to an unmerged/unreleased frontend or gateway.
+
+From the Identity repository root:
 
 ```bash
 ./docker/setup production
@@ -51,6 +107,7 @@ This creates `docker/production/.env` with five distinct, random internal
 credentials and owner-only permissions. It never overwrites an existing `.env`
 or rotates existing credentials. Edit that file and replace every placeholder:
 
+- `IDENTITY_VERSION=sha-<published full SHA>` and the corresponding source checkout.
 - Public origin and matching WebAuthn RP ID (initially `sphere.score.us.es`).
 - First operator email, Brevo SMTP login/key and authenticated sender.
 - GitHub App ID, installation ID and catalogue repository/branch. Grant the App
@@ -91,10 +148,13 @@ SPHERE must already be running so its shared Docker network exists. Then:
 
 ```bash
 cd docker/production
-docker compose up -d --build --wait --wait-timeout 300
+docker compose pull
+docker compose up -d --no-build --wait --wait-timeout 300
 ```
 
-After initial image builds, plain `docker compose up -d` starts the full triplet.
+Plain `docker compose up -d` also pulls the selected release and starts the full
+triplet. An explicit `pull` first checks that every image is available before
+changing running services. No compilation tools are required on the server.
 Startup renders configuration, initializes a missing realm, reconciles managed
 settings, initializes a missing GitHub catalogue, waits for verified application,
 and then starts both APIs and the gateway. Existing users, credentials and
@@ -171,6 +231,31 @@ For a hostname change, update both origins/RP ID, SPHERE settings, public DNS/TL
 and registered Google/application callbacks. Existing passkeys and external US
 service approval require explicit migration review; changing `.env` cannot move
 credentials bound to the old RP/issuer.
+
+## Release updates and backups
+
+Before the first cutover, back up the existing SPHERE MongoDB, Redis/session state,
+static uploads and configuration using its normal operational procedure. Confirm
+that SPHERE still works in local mode. Identity can run in preview while existing
+users link their accounts; bulk migration is not implemented by this deployment.
+
+For an Identity update, first back up its PostgreSQL, private runtime/configuration
+and avatar volume using `docs/OPERATIONS.md`. Record the current source SHA and
+image tag, fetch/check out the newly published revision, and change only the release
+tag in the private `.env`. Keep all credentials, project names and persistent
+volumes intact. From `docker/production`:
+
+```bash
+docker compose pull
+docker compose up -d --no-build --wait --wait-timeout 300
+docker compose ps
+```
+
+Verify the public issuer, email delivery, passkey login, both portals and catalogue
+publication before completing the change. To return to a previous application
+release, restore its matching source checkout/image tag. If a provider upgrade
+changed the database schema, image rollback alone is insufficient: follow the
+validated backup/restore procedure. Never use `down -v` for deployment or rollback.
 
 ## Operations and rollback
 
