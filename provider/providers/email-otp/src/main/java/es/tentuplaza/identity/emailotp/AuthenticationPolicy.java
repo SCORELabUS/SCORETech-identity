@@ -30,8 +30,24 @@ public final class AuthenticationPolicy {
     return user != null && user.credentialManager().isConfiguredFor(PASSKEY);
   }
   public static void record(AuthenticationSessionModel auth, RealmModel realm, UserModel user, String method) {
+    auth.setUserSessionNote(BrokerLoginGuard.AUTHENTICATED_USER,
+        user != null && user.getId() != null && user.getId().equals(auth.getAuthNote(BrokerLoginGuard.AUTHENTICATED_USER)) ? user.getId() : "");
     auth.setUserSessionNote(METHOD, method);
     auth.setUserSessionNote(ADMIN, Boolean.toString(isAdmin(realm, user) && PASSKEY.equals(method)));
+  }
+  static void inheritBrokerAuthentication(AuthenticationSessionModel auth, org.keycloak.models.UserSessionModel existing, UserModel user) {
+    if (existing != null && user != null && user.getId() != null && existing.getUser() != null
+        && user.getId().equals(existing.getUser().getId())
+        && ("external".equals(existing.getNote(METHOD)) || user.getId().equals(existing.getNote(BrokerLoginGuard.AUTHENTICATED_USER)))) {
+      auth.setAuthNote(BrokerLoginGuard.AUTHENTICATED_USER,user.getId());
+      auth.setUserSessionNote(BrokerLoginGuard.AUTHENTICATED_USER,user.getId());
+      // Passive OIDC rejects pending actions before their challenge can auto-complete.
+      // Clear the same redundant mailbox action our broker-aware action would skip.
+      if (!"VERIFY_EMAIL".equals(auth.getClientNote(org.keycloak.models.Constants.KC_ACTION))) {
+        user.removeRequiredAction(UserModel.RequiredAction.VERIFY_EMAIL);
+        auth.removeRequiredAction(UserModel.RequiredAction.VERIFY_EMAIL);
+      }
+    }
   }
   /** Adapt success only. All validation, errors and credential management remain native. */
   public static <T> T onSuccess(Class<T> contract, T delegate, Runnable success) {

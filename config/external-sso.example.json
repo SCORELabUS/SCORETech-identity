@@ -1,0 +1,12 @@
+{
+  "google": {
+    "enabled": false,
+    "clientId": "replace-with-SPHERE-google-client-id",
+    "clientSecret": ""
+  },
+  "us": {
+    "enabled": true,
+    "casUrl": "https://sso.us.es/CAS",
+    "callbackUrl": "https://sphere.score.us.es/api/v1/users/auth/sso/us/callback"
+  }
+}

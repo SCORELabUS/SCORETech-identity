@@ -50,6 +50,15 @@ class UserMutationTest {
     for (List<String> value : List.<List<String>>of(List.of(), List.of("yes"), List.of("TRUE"), List.of("true", "false")))
       assertThrows(BadRequestException.class, () -> UserMutationResourceFactory.validate(session, Map.of("attributes", Map.of("tentuMarketing", value)), false));
   }
+  @Test void accountCanPatchOnlySharedProfileGroupsWithoutReplacingOtherState() {
+    var user = mock(UserModel.class);
+    var patch = Map.<String,Object>of("attributes", Map.of("scoreProfile", List.of("{\"displayName\":\"Researcher\"}"), "scoreSocialLinks", List.of("{\"x\":\"https://x.com/researcher\"}")));
+    assertDoesNotThrow(() -> UserMutationResourceFactory.validate(session, patch, false));
+    UserMutationResourceFactory.apply(user, patch);
+    verify(user).setAttribute("scoreProfile", List.of("{\"displayName\":\"Researcher\"}"));
+    verify(user).setAttribute("scoreSocialLinks", List.of("{\"x\":\"https://x.com/researcher\"}"));
+    verifyNoMoreInteractions(user);
+  }
   @Test void emailChangeAlwaysInvalidatesVerificationAndLeavesUsernameStable() {
     var user = mock(UserModel.class); when(user.getEmail()).thenReturn("old@example.invalid");
     UserMutationResourceFactory.apply(user, Map.of("email", "NEW@example.invalid", "emailVerified", true));

@@ -13,7 +13,7 @@ import org.keycloak.services.resource.*;
 
 /** Apply a field/attribute patch against the current model, never a stale user representation. */
 public final class UserMutationResourceFactory implements RealmResourceProviderFactory {
-  private static final Set<String> PROFILE_ATTRIBUTES = Set.of("tentuMarketing", "tentuPreferences", "tentuAvatar", "tentuPhone", "tentuTaxDocumentType", "tentuTaxDocumentNumber", "tentuUpdatedAt", "tentuPasskeySuggestionSeen");
+  private static final Set<String> PROFILE_ATTRIBUTES = Set.of("scoreProfile", "scoreSocialLinks", "tentuMarketing", "tentuPreferences", "tentuAvatar", "tentuPhone", "tentuTaxDocumentType", "tentuTaxDocumentNumber", "tentuUpdatedAt", "tentuPasskeySuggestionSeen");
   private static final Set<String> ADMIN_ATTRIBUTES = Set.of("tentuWooCustomerId", "tentuWooStoreId", "tentuInvitationState");
   public String getId() { return "tentu-user-mutations"; }
   public RealmResourceProvider create(KeycloakSession session) { return new RealmResourceProvider() {

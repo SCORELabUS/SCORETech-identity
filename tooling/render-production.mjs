@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadExternalSso } from "./external-sso.mjs";
 import { configuration } from "./identity-config.mjs";
 import {
   exists,
@@ -118,6 +119,7 @@ export async function renderProduction(env = process.env) {
     );
   const artifacts = await renderIdentityArtifacts({
     config: c,
+    identityProviders: await loadExternalSso(runtime),
     serviceSecrets: { admin, account, sync },
     smtp: {
       host: "smtp-relay.brevo.com",

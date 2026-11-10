@@ -10,6 +10,7 @@ import { generateKeyPairSync } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse, stringify } from "yaml";
+import { loadExternalSso } from "./external-sso.mjs";
 import { configuration, digest } from "./identity-config.mjs";
 
 const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +30,7 @@ export async function renderIdentityArtifacts({
   serviceVersion = "0.7.2",
   registrationDefaultRole,
   syncManagement = false,
+  identityProviders = [],
 }) {
   for (const kind of ["admin", "account", "sync"]) {
     if (typeof serviceSecrets?.[kind] !== "string" || !serviceSecrets[kind])
@@ -120,6 +122,7 @@ export async function renderIdentityArtifacts({
   const realm = JSON.parse(
     await readFile(path.join(source, "config/realm-template.json"), "utf8"),
   );
+  realm.identityProviders = identityProviders;
   realm.realm = c.realm;
   realm.displayName = "SCORETech Identity";
   realm.webAuthnPolicyPasswordlessRpId = c.rpId;
@@ -202,6 +205,7 @@ export async function renderIdentityArtifacts({
       redirectUris: [
         app,
         app + "auth/callback",
+        app + "auth/silent-callback",
         app + "auth/verification-callback",
       ],
       webOrigins: [c.origin],
@@ -294,6 +298,7 @@ export async function renderIdentityArtifacts({
             "realm-management": [
               "view-realm",
               "manage-realm",
+              "manage-identity-providers",
               "view-clients",
               "manage-clients",
             ],
@@ -409,6 +414,8 @@ export async function prepareLaboratory(env = process.env) {
   );
   const artifacts = await renderIdentityArtifacts({
     config: c,
+    identityProviders: await loadExternalSso(runtime, true),
+    registrationDefaultRole: "member",
     serviceSecrets: {
       admin: "fixture-local-admin-service",
       account: "fixture-local-account-service",
@@ -493,7 +500,7 @@ export async function prepareLaboratory(env = process.env) {
   if (process.getuid?.() === 0) await chown(keyFile, 1000, 1000);
   await writePublicConfiguration(runtime, c, { lab: true });
   console.log(
-    "Prepared isolated SCORETech Identity laboratory. No external account or SMTP credentials are used.",
+    "Prepared isolated SCORETech Identity laboratory. No external services were contacted.",
   );
   return artifacts;
 }

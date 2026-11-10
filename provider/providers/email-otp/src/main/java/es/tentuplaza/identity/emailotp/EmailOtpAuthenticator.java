@@ -48,6 +48,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
           if (name.equals("success")) {
             enforceClientAccess(context);
             var existing = previous[0];
+            AuthenticationPolicy.inheritBrokerAuthentication(context.getAuthenticationSession(), existing, context.getUser());
             if (AuthenticationPolicy.isAdmin(context.getRealm(), context.getUser()) &&
                 (existing == null || !"true".equals(existing.getNote(AuthenticationPolicy.ADMIN)) || !AuthenticationPolicy.hasPasskey(context.getUser())))
               throw new SsoStepUp();

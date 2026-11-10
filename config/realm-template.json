@@ -70,6 +70,87 @@
       "description": "Native SSO and credentials, server-enforced administrative passkeys.",
       "providerId": "basic-flow",
       "topLevel": true
+    },
+    {
+      "alias": "score-first-broker-login-v1",
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-review-profile",
+          "authenticatorFlow": false,
+          "priority": 10,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "score-create-or-link-v1",
+          "authenticatorFlow": true,
+          "priority": 20,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        }
+      ],
+      "builtIn": false,
+      "providerId": "basic-flow",
+      "topLevel": true
+    },
+    {
+      "alias": "score-link-existing-v1",
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-confirm-link",
+          "authenticatorFlow": false,
+          "priority": 10,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "idp-email-verification",
+          "authenticatorFlow": false,
+          "priority": 20,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        }
+      ],
+      "builtIn": false,
+      "providerId": "basic-flow",
+      "topLevel": false
+    },
+    {
+      "alias": "score-post-broker-login",
+      "authenticationExecutions": [
+        {
+          "authenticator": "score-broker-login-guard",
+          "authenticatorFlow": false,
+          "priority": 10,
+          "requirement": "REQUIRED",
+          "userSetupAllowed": false
+        }
+      ],
+      "builtIn": false,
+      "providerId": "basic-flow",
+      "topLevel": true
+    },
+    {
+      "alias": "score-create-or-link-v1",
+      "authenticationExecutions": [
+        {
+          "authenticator": "idp-create-user-if-unique",
+          "authenticatorFlow": false,
+          "priority": 20,
+          "requirement": "ALTERNATIVE",
+          "userSetupAllowed": false
+        },
+        {
+          "flowAlias": "score-link-existing-v1",
+          "authenticatorFlow": true,
+          "priority": 30,
+          "requirement": "ALTERNATIVE",
+          "userSetupAllowed": false
+        }
+      ],
+      "builtIn": false,
+      "providerId": "basic-flow",
+      "topLevel": false
     }
   ],
   "requiredActions": [
@@ -78,7 +159,8 @@
       "defaultAction": false,
       "enabled": true,
       "name": "Crear clave de acceso",
-      "providerId": "tentu-register-passkey"
+      "providerId": "tentu-register-passkey",
+      "priority": 100
     },
     {
       "alias": "webauthn-register",
@@ -128,6 +210,41 @@
       "enabled": true,
       "name": "Eliminar m\u00e9todo de acceso",
       "providerId": "tentu-delete-credential"
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "providerId": "VERIFY_EMAIL",
+      "name": "Verify email",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 10
+    },
+    {
+      "alias": "idp_link",
+      "providerId": "idp_link",
+      "enabled": true,
+      "defaultAction": false,
+      "name": "Connect sign-in provider"
+    },
+    {
+      "alias": "score-unlink-identity",
+      "providerId": "score-unlink-identity",
+      "enabled": true,
+      "defaultAction": false,
+      "name": "Disconnect sign-in provider",
+      "config": {
+        "max_auth_age": "0"
+      }
+    },
+    {
+      "alias": "score-delete-account",
+      "providerId": "score-delete-account",
+      "enabled": true,
+      "defaultAction": false,
+      "name": "Delete SCORETech identity",
+      "config": {
+        "max_auth_age": "0"
+      }
     }
   ],
   "sslRequired": "none",

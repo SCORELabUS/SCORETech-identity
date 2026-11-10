@@ -61,6 +61,29 @@ class AuthenticationPolicyTest {
     assertThrows(jakarta.ws.rs.ForbiddenException.class,
         () -> mapper.transformAccessToken(new AccessToken(), model, session, userSession, null));
   }
+  @Test void brokerOriginSurvivesOnlySameUserValidatedSsoCookies() {
+    var auth=mock(org.keycloak.sessions.AuthenticationSessionModel.class);var existing=mock(UserSessionModel.class);var user=mock(UserModel.class);
+    when(user.getId()).thenReturn("user");when(existing.getUser()).thenReturn(user);when(existing.getNote(AuthenticationPolicy.METHOD)).thenReturn("external");
+    AuthenticationPolicy.inheritBrokerAuthentication(auth,existing,user);
+    verify(auth).setAuthNote(BrokerLoginGuard.AUTHENTICATED_USER,"user");
+    verify(user,never()).setEmailVerified(true);
+    verify(user).removeRequiredAction(UserModel.RequiredAction.VERIFY_EMAIL);
+    reset(auth);var other=mock(UserModel.class);when(other.getId()).thenReturn("other");
+    AuthenticationPolicy.inheritBrokerAuthentication(auth,existing,other);verifyNoInteractions(auth);
+  }
+  @Test void explicitlyRequestedEmailVerificationIsNeverClearedBySso() {
+    var auth=mock(org.keycloak.sessions.AuthenticationSessionModel.class);var existing=mock(UserSessionModel.class);var user=mock(UserModel.class);
+    when(user.getId()).thenReturn("user");when(existing.getUser()).thenReturn(user);when(existing.getNote(AuthenticationPolicy.METHOD)).thenReturn("external");
+    when(auth.getClientNote(org.keycloak.models.Constants.KC_ACTION)).thenReturn("VERIFY_EMAIL");
+    AuthenticationPolicy.inheritBrokerAuthentication(auth,existing,user);
+    verify(user,never()).removeRequiredAction(UserModel.RequiredAction.VERIFY_EMAIL);
+  }
+  @Test void localAuthenticationClearsOldBrokerOriginButBrokerStepUpRetainsIt() {
+    var auth=mock(org.keycloak.sessions.AuthenticationSessionModel.class);var realm=mock(RealmModel.class);var user=mock(UserModel.class);when(user.getId()).thenReturn("user");
+    AuthenticationPolicy.record(auth,realm,user,"email-otp");verify(auth).setUserSessionNote(BrokerLoginGuard.AUTHENTICATED_USER,"");
+    when(auth.getAuthNote(BrokerLoginGuard.AUTHENTICATED_USER)).thenReturn("user");
+    AuthenticationPolicy.record(auth,realm,user,AuthenticationPolicy.PASSKEY);verify(auth).setUserSessionNote(BrokerLoginGuard.AUTHENTICATED_USER,"user");
+  }
   @Test void parsesCustomTemplatesWithTheBundledFreemarkerEngine() throws Exception {
     var c=new freemarker.template.Configuration(freemarker.template.Configuration.VERSION_2_3_32); var root=java.nio.file.Path.of("../../themes/score").toAbsolutePath().normalize(); c.setOutputFormat(freemarker.core.HTMLOutputFormat.INSTANCE); c.setDirectoryForTemplateLoading(root.toFile());
     try(var files=java.nio.file.Files.walk(root)) { for(var p:files.filter(p->p.toString().endsWith(".ftl")).toList()) c.getTemplate(root.relativize(p).toString()); }

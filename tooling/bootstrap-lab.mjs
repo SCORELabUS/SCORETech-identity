@@ -1,3 +1,7 @@
+import {
+  reconcileExternalSso,
+  reconcileAccountLinking,
+} from "./external-sso.mjs";
 // Local-only reconciliation. Never points at or reads deployed credentials.
 import { readFile } from "node:fs/promises";
 import { acquireAuthorizationLock } from "../packages/identity-internal/dist/coordination.js";
@@ -48,12 +52,19 @@ const release = await acquireAuthorizationLock(
   process.env.APP_AUTHORIZATION_LOCK_FILE,
 );
 try {
+  await reconcileExternalSso(request, realm);
+  await reconcileAccountLinking(request);
   const profile = await request("/users/profile");
   profile.unmanagedAttributePolicy = "ADMIN_EDIT";
   await request("/users/profile", "PUT", profile);
   const currentRealm = await request("");
   await request("", "PUT", {
     displayName: realm.displayName,
+    attributes: {
+      ...currentRealm.attributes,
+      "tentu.registration.default-role":
+        realm.attributes["tentu.registration.default-role"],
+    },
     webAuthnPolicyPasswordlessRpEntityName:
       realm.webAuthnPolicyPasswordlessRpEntityName,
     smtpServer: {

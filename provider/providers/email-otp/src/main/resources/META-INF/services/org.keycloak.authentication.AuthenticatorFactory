@@ -1,1 +1,3 @@
 es.tentuplaza.identity.emailotp.EmailOtpAuthenticatorFactory
+
+es.tentuplaza.identity.emailotp.BrokerLoginGuardFactory

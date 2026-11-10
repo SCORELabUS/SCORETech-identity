@@ -62,6 +62,20 @@
         <button class="btn-primary tp-registration-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
       </form>
     <#else>
+      <#if social?? && social.providers?has_content>
+        <nav class="tp-social-providers" aria-label="Sign in with another provider">
+          <#list social.providers as provider>
+            <#assign isGoogle = provider.alias == "google" || provider.alias?starts_with("google-")>
+            <#assign isUs = provider.alias == "us-sso">
+            <a class="tp-social-provider cursor-pointer<#if isGoogle> tp-social-google<#elseif isUs> tp-social-us</#if>" id="social-${provider.alias}" href="${provider.loginUrl}">
+              <#if isGoogle><img class="tp-provider-icon" src="${url.resourcesPath}/img/google.svg" width="20" height="20" alt="" aria-hidden="true" />
+              <#elseif isUs><img class="tp-provider-us-logo" src="${url.resourcesPath}/img/universidad-sevilla.png" alt="" aria-hidden="true" /></#if>
+              <span>Continue with ${provider.displayName}</span>
+            </a>
+          </#list>
+        </nav>
+        <div class="tp-social-divider"><span>or continue with email</span></div>
+      </#if>
       <form id="kc-email-otp-form" class="tp-auth-flow" action="${url.loginAction}" method="post">
         <input type="hidden" name="stage" value="identify" />
         <p class="tp-auth-copy">Sign in or create an account with your email address.</p>

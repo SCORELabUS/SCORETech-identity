@@ -1,3 +1,7 @@
+import {
+  reconcileExternalSso,
+  reconcileAccountLinking,
+} from "./external-sso.mjs";
 import { readFile } from "node:fs/promises";
 import { acquireAuthorizationLock } from "../packages/identity-internal/dist/coordination.js";
 import { loadConfig } from "../apps/admin-api/dist/main/config/app-config.js";
@@ -50,19 +54,26 @@ const call = async (path, method = "GET", body) => {
   });
   if (!response.ok)
     throw new Error(`Realm configuration failed (${response.status}).`);
-  return response.status === 204 ? undefined : response.json();
+  const text = await response.text();
+  return text ? JSON.parse(text) : undefined;
 };
 const release = await acquireAuthorizationLock(
   process.env.APP_AUTHORIZATION_LOCK_FILE,
 );
 try {
+  await reconcileExternalSso(call, realm);
+  await reconcileAccountLinking(call);
   const profile = await call("/users/profile");
   profile.unmanagedAttributePolicy = "ADMIN_EDIT";
   await call("/users/profile", "PUT", profile);
   const current = await call("");
   const attributes = { ...current.attributes };
   for (const [key, value] of Object.entries(realm.attributes))
-    if (key.startsWith("tentu.legal.")) attributes[key] = value;
+    if (
+      key.startsWith("tentu.legal.") ||
+      key === "tentu.registration.default-role"
+    )
+      attributes[key] = value;
   await call("", "PUT", {
     ...current,
     displayName: realm.displayName,
