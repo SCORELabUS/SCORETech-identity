@@ -1,6 +1,7 @@
 interface SessionUser {
   access_token: string;
   expired?: boolean;
+  expires_in?: number;
 }
 
 export function sessionRejected(error: unknown): boolean {
@@ -9,6 +10,9 @@ export function sessionRejected(error: unknown): boolean {
     "invalid_grant",
     "login_required",
     "interaction_required",
+    "consent_required",
+    "account_selection_required",
+    "access_denied",
     "invalid_token",
   ].includes(code ?? "");
 }
@@ -20,6 +24,7 @@ export function createSessionAccess<T extends SessionUser>(
     getUser(): Promise<T | null>;
     signinSilent(): Promise<T | null>;
     removeUser(): Promise<void>;
+    recover?(before: T): Promise<T | null>;
   },
   fetcher: typeof fetch = fetch,
 ) {
@@ -36,11 +41,30 @@ export function createSessionAccess<T extends SessionUser>(
               { error: "login_required" },
             );
           return user;
-        } catch (error) {
+        } catch (initialError) {
+          let error = initialError;
+          const current = await manager.getUser();
+          if (
+            before &&
+            manager.recover &&
+            sessionRejected(error) &&
+            current?.access_token === before.access_token
+          ) {
+            try {
+              const recovered = await manager.recover(before);
+              if (recovered && !recovered.expired) return recovered;
+              error = Object.assign(
+                new Error("Your session has ended. Sign in again."),
+                { error: "login_required" },
+              );
+            } catch (cause) {
+              error = cause;
+            }
+          }
           const latest = await manager.getUser();
           if (
             sessionRejected(error) &&
-            latest?.access_token === before?.access_token
+            (!latest || latest.access_token === before?.access_token)
           )
             await manager.removeUser();
           throw error;
@@ -55,7 +79,7 @@ export function createSessionAccess<T extends SessionUser>(
     path: string,
     options: RequestInit,
   ): Promise<Response> {
-    let user = await manager.getUser();
+    let user = renewing ? await renewing : await manager.getUser();
     if (!user) throw new Error("Your session has expired. Sign in again.");
     if (user.expired) user = await renew();
     const send = (current: T) =>
@@ -68,7 +92,7 @@ export function createSessionAccess<T extends SessionUser>(
       });
     let response = await send(user);
     if (response.status === 401) {
-      const latest = await manager.getUser();
+      const latest = renewing ? await renewing : await manager.getUser();
       if (!latest) return response;
       user =
         latest.access_token !== user.access_token && !latest.expired
@@ -83,5 +107,13 @@ export function createSessionAccess<T extends SessionUser>(
     }
     return response;
   }
-  return { renew, request };
+  async function resume(): Promise<T | null> {
+    if (renewing) return renewing;
+    const user = await manager.getUser();
+    return user &&
+      (user.expired || (user.expires_in !== undefined && user.expires_in <= 60))
+      ? renew()
+      : user;
+  }
+  return { renew, request, resume };
 }

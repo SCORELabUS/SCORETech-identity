@@ -35,6 +35,8 @@ export const manager = new UserManager({
   authority: config.issuer,
   client_id: config.clientId,
   redirect_uri: config.baseUrl + "auth/callback",
+  silent_redirect_uri: config.baseUrl + "auth/silent-callback",
+  silentRequestTimeoutInSeconds: 15,
   popup_redirect_uri: config.baseUrl + "auth/verification-callback",
   post_logout_redirect_uri: config.baseUrl,
   response_type: "code",
@@ -49,9 +51,45 @@ export const manager = new UserManager({
     prefix: "score.state.",
   }),
 });
-const session = createSessionAccess(manager);
+const session = createSessionAccess({
+  getUser: () => manager.getUser(),
+  signinSilent: () => manager.signinSilent(),
+  removeUser: () => manager.removeUser(),
+  async recover(before: User) {
+    // Clear only the stale local credential, preserving the view while probing SSO.
+    await manager.storeUser(null);
+    try {
+      const user = await manager.signinSilent({
+        state: { recoverySubject: before.profile.sub },
+        extraQueryParams: before.id_token
+          ? { id_token_hint: before.id_token }
+          : undefined,
+      });
+      if (user && user.profile.sub !== before.profile.sub) {
+        if ((await manager.getUser())?.access_token === user.access_token)
+          await manager.storeUser(null);
+        throw Object.assign(
+          new Error("Sign in again to confirm your account."),
+          { error: "login_required" },
+        );
+      }
+      return user;
+    } catch (error) {
+      if (!sessionRejected(error) && !(await manager.getUser()))
+        await manager.storeUser(before);
+      throw error;
+    }
+  },
+});
 let initialization: Promise<User | null> | undefined;
 async function initialize() {
+  if (
+    location.pathname ===
+    new URL(config.baseUrl).pathname + "auth/silent-callback"
+  ) {
+    await manager.signinSilentCallback();
+    return null;
+  }
   if (
     location.pathname ===
     new URL(config.baseUrl).pathname + "auth/verification-callback"
@@ -87,7 +125,13 @@ async function initialize() {
     return null;
   }
   const user = await manager.getUser();
-  return user ? (user.expired ? session.renew() : user) : null;
+  try {
+    return user ? await session.resume() : await session.renew();
+  } catch (cause) {
+    if (sessionRejected(cause)) return null;
+    if (user) return (await manager.getUser()) ?? user;
+    throw cause;
+  }
 }
 interface Auth {
   user: User | null;
@@ -110,6 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const loaded = (value: User) => {
+      const expected = (value.state as { recoverySubject?: string } | undefined)?.recoverySubject;
+      if (expected && value.profile.sub !== expected) return;
       clearTimeout(retry);
       if (active) {
         setUser(value);
@@ -128,12 +174,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         setError(
           sessionRejected(cause)
-            ? "Your session has expired. Sign in again."
+            ? "Please sign in again to continue."
             : "Your session could not be renewed. Retrying…",
         );
         if (!sessionRejected(cause)) retry = setTimeout(refresh, 5000);
       });
     };
+    const resume = () => {
+      if (document.visibilityState === "hidden") return;
+      void session
+        .resume()
+        .then((value) => {
+          if (active && value) loaded(value);
+        })
+        .catch((cause) => {
+          if (!active) return;
+          setError(
+            sessionRejected(cause)
+              ? "Please sign in again to continue."
+              : "Your session could not be renewed. Retrying…",
+          );
+          if (!sessionRejected(cause)) {
+            clearTimeout(retry);
+            retry = setTimeout(resume, 5000);
+          }
+        });
+    };
+    window.addEventListener("focus", resume);
+    window.addEventListener("pageshow", resume);
+    document.addEventListener("visibilitychange", resume);
     manager.events.addAccessTokenExpiring(refresh);
     manager.events.addAccessTokenExpired(refresh);
     void (initialization ??= initialize())
@@ -151,6 +220,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     return () => {
       active = false;
+      window.removeEventListener("focus", resume);
+      window.removeEventListener("pageshow", resume);
+      document.removeEventListener("visibilitychange", resume);
       manager.events.removeUserLoaded(loaded);
       manager.events.removeUserUnloaded(removed);
       clearTimeout(retry);

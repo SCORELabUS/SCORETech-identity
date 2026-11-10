@@ -399,9 +399,6 @@ try {
   const delegatedAccount = await member.context().newPage();
   await delegatedAccount.goto(origin + "/identity/account/");
   await delegatedAccount
-    .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
-    .click();
-  await delegatedAccount
     .getByRole("heading", { name: "Your profile.", exact: true })
     .waitFor();
   await delegatedAccount.getByLabel("First name", { exact: true }).waitFor();
@@ -600,9 +597,6 @@ try {
   await verifyCatalogueDeletion({ admin, run, artifacts, mark });
   await verifyPaginationSession({ admin, origin, run, artifacts, mark });
   await admin.goto(origin + "/identity/account/");
-  await admin
-    .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
-    .click();
   await admin
     .getByRole("heading", { name: "Your profile.", exact: true })
     .waitFor({ timeout: 30000 });
