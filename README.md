@@ -34,8 +34,8 @@ Install Docker with Compose v2, start Docker, and run from this repository:
 ```
 
 This builds and starts PostgreSQL, the customized Keycloak provider, Account API,
-Admin API, the two web applications, the gateway, Mailpit and the local catalogue
-fixture/synchronizer. No host Node.js, Java, Maven, external SMTP account or GitHub
+Admin API, the two web applications, the gateway, Mailpit and a one-time database
+catalogue initializer. No host Node.js, Java, Maven, external SMTP account or GitHub
 credentials are needed to launch the lab. The first build downloads dependencies
 and container images; allow it to finish before opening the applications.
 
@@ -69,12 +69,11 @@ code in Mailpit.
 ./lab down              # Stop the lab without deleting its data
 ```
 
-PostgreSQL uses a named volume; generated local configuration and catalogue state
-live in `.lab/`. Restarting the lab preserves identities, credentials and catalogue
-history. There is no automatic volume purge or reset in these commands. The local
-GitHub-compatible fixture exercises versioned role, permission and access-rule publication and real provider
-synchronization without contacting a GitHub account; it is excluded from the
-production tooling image.
+PostgreSQL stores identities, credentials, applications, roles, permissions and
+catalogue audit history in a named volume. `.lab/` contains private generated
+configuration, not the authoritative permission store. Restarting preserves data.
+An existing lab imports its previous catalogue/history once without resetting
+native role IDs or grants. No GitHub App or synchronization service is required.
 
 ## Develop and verify
 
@@ -95,6 +94,7 @@ With the local lab running, browser verification is available through:
 
 ```bash
 pnpm test:e2e
+pnpm test:e2e:catalogue  # Native transactions, conflicts, rollback and public legal pages
 ```
 
 The default browser executable is Google Chrome on macOS. To use Playwright's
@@ -103,6 +103,7 @@ Chromium instead:
 ```bash
 pnpm exec playwright install chromium
 IDENTITY_E2E_CHROMIUM=1 pnpm test:e2e
+pnpm test:e2e:catalogue  # Native transactions, conflicts, rollback and public legal pages
 ```
 
 The E2E harness only accepts the isolated HTTP `localhost` lab. It uses virtual
@@ -128,7 +129,7 @@ isolated CAS fixture flow; it does not contact the US or Google.
 Docker entry points are available in `docker/development`, `docker/staging` and
 `docker/production`. Development starts with `docker compose up -d --build`;
 production/staging pull verified GHCR images and first need their private `.env`,
-GitHub App key and existing SPHERE network configured. Pushes to `main` publish
+Brevo credentials and existing SPHERE network configured. Pushes to `main` publish
 provider, Account, Admin, gateway and tooling images after the complete CI passes,
 then create a versioned GitHub release with an incremental changelog. Production
 stays on the `main` branch and uses `IDENTITY_VERSION=main`. See [Docker deployment](docker/README.md) for exact
@@ -143,7 +144,7 @@ configurable; changing WebAuthn RP/issuer requires a migration review.
 - `provider/`: Keycloak distribution, Java extensions and SCORE login/email themes.
 - `apps/`: Account and Admin web/API applications.
 - `packages/identity-internal/`: shared server-side identity adapters.
-- `tooling/`, `config/`, `deploy/`: rendering, catalogue synchronization and containers.
+- `tooling/`, `config/`, `deploy/`: rendering, database initialization and containers.
 - [Third-party notices](THIRD_PARTY_NOTICES.md) and [license](LICENSE): upstream
   attribution and retained licenses.
 
@@ -151,3 +152,12 @@ Native identity contracts, Java package names and technical identifiers such as
 `tentu-*`, `tentu.*` and the protected `administrador` role are deliberately retained
 where they form the provider/API compatibility contract. They do not select the
 realm or contact Tentu services. The private Tentu React identity SDK is not included.
+
+## Public terms and privacy
+
+Terms are at `/identity/legal/terms` and privacy at `/identity/legal/privacy`,
+without authentication. Edit the English source and last-updated date in
+`legal/documents.json`. Rendering publishes the pages and automatically derives
+the internal registration acceptance references; no external legal host, manual
+hashes or legal-version environment variables are required. The documents identify
+the SCORE Excellence Unit at the University of Seville and `infoscore@us.es`.

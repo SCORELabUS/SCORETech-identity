@@ -32,7 +32,7 @@ environment setup, deployment and its verification limits.
 - `packages/identity-internal/`: shared server-side identity and provider adapters.
 - `packages/ui/`: shared UI, authentication/session handling and styles.
 - `config/realm-template.json`: source realm configuration.
-- `tooling/`: configuration rendering, realm bootstrap, catalogue fixture and sync.
+- `tooling/`: configuration rendering, realm bootstrap and one-time database initialization.
 - `docker/development/`, `docker/staging/`, `docker/production/`: canonical Compose entry points; see `docker/README.md`.
 - `deploy/local/`, `deploy/production/`: shared Compose and gateway definitions included by those entry points.
 - `tests/unit/`: tooling/configuration/coordination tests.
@@ -92,9 +92,11 @@ point them at production. Virtual WebAuthn is not a real-device passkey check.
 
 ## Authorization, applications and sessions
 
-- Role/permission definitions use a versioned catalogue. Admin publishes through
-  the GitHub adapter (a local fixture in the lab); synchronization applies the
-  native provider registry. Distinguish saved revisions from verified application.
+- PostgreSQL/Keycloak is the authoritative role and permission catalogue. Admin
+  reads/writes the private `score-catalogue` service API. Native authorization and
+  catalogue audit history commit in the same transaction. Preserve optimistic
+  revision checks, delegation validation and rollback on failures. No GitHub App,
+  pending Git state, mounted role projection or background synchronization exists.
 - Keep live server/provider authorization checks. Hiding UI controls is not an
   authorization boundary; token refresh must not bypass role or application checks.
 - Managed OpenID Connect applications own callback/origin settings and required
@@ -160,7 +162,7 @@ migration review. Production SMTP uses Brevo via Compose secrets sourced from th
 lab uses Mailpit. Follow the setup order and secret ownership rules in
 `docs/OPERATIONS.md`. Keep native administration private and do not expose database
 or provider ports as a shortcut. Report actual verification separately from
-unperformed live Brevo, GitHub installation, production or migration checks.
+unperformed live Brevo, production or migration checks.
 
 ## External identity providers
 
@@ -209,3 +211,21 @@ and normalization. Preserve named-color/legacy-avatar compatibility. Native
 `score-delete-account` requires fresh authentication, exact email confirmation,
 Account Web client binding and protected-admin checks; never expose an unrestricted
 self-delete API or claim that deleting the identity erases service-owned data.
+
+## Public legal documents
+
+`legal/documents.json` is the English source for public `/identity/legal/terms`
+and `/identity/legal/privacy`. The operator confirmed the SCORE Excellence Unit
+of the University of Seville and `infoscore@us.es` for support/privacy enquiries.
+Adapt the documents to the actual identity service and retention behavior; never
+copy TenTuPlaza commercial, examination, payment or marketing clauses. Update
+the source/date and let rendering derive registration references automatically.
+Do not reintroduce manual legal SHA/version env variables, external legal hosting
+or a legal publication service. Preserve anonymous access and legal links in login,
+registration and both portals.
+
+Catalogue initialization is idempotent. Existing lab `github/state.json` is only
+a one-time migration input; verify its snapshot digests and native revision and
+import history before marking the database managed. Never reset roles from defaults
+on an upgrade. Retain the old private archive, remove obsolete Compose writers
+with `--remove-orphans`, and keep `score-catalogue` blocked at the public gateway.

@@ -25,3 +25,7 @@ validation are adapted from the local SPHERE project (SCORELabUS). The editor
 retains SPHERE's initials, predefined avatar pagination, foreground/background
 color selection and react-easy-crop photo cropping workflow. react-easy-crop and
 sharp retain their upstream licenses in the installed dependency distributions.
+
+The public terms/privacy presentation and subject structure are adapted from the
+local TenTuPlaza legal pages. The English SCORETech documents are rewritten for
+central identity, the SCORE Excellence Unit and its confirmed contact details.

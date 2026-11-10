@@ -12,8 +12,8 @@ SPHERE's existing services before sizing the shared machine.
 | Staging | `docker/staging` | `.identity-staging-runtime`, separate staging volumes | Private gateway localhost:18011 |
 | Production | `docker/production` | `.identity-runtime`, existing production volumes | Private gateway localhost:18010 |
 
-Staging uses real HTTPS, Brevo and a GitHub App, with a distinct hostname,
-catalogue branch, database, credentials and gateway alias. Point it at a staging
+Staging uses real HTTPS and Brevo, with a distinct hostname, database, credentials
+and gateway alias. Point it at a staging
 SPHERE network/gateway, not the live production login. The example hostname must
 be replaced. Never share a runtime directory or database between environments.
 
@@ -21,12 +21,12 @@ be replaced. Never share a runtime directory or database between environments.
 
 ```bash
 cd docker/development
-docker compose up -d --build --wait --wait-timeout 300
+docker compose up -d --build --remove-orphans --wait --wait-timeout 300
 ```
 
 Plain `docker compose up` also builds missing images and starts dependencies.
 `--build` additionally rebuilds changed source. Preparation, import, bootstrap and
-catalogue synchronization are dependencies, not manual steps. The existing
+database catalogue initialization are dependencies, not manual steps. The existing
 `./lab up`, `./lab check`, `./lab logs` and `./lab down` commands remain supported
 and use the same project, state and volumes. Do not run both entry points at once.
 
@@ -54,7 +54,7 @@ or SSH access are needed by the publishing workflow.
 | `ghcr.io/scorelabus/scoretech-identity-account` | Account API with its own default command |
 | `ghcr.io/scorelabus/scoretech-identity-admin` | Admin API with its own default command |
 | `ghcr.io/scorelabus/scoretech-identity-gateway` | Account/Admin web applications and production Nginx |
-| `ghcr.io/scorelabus/scoretech-identity-tooling` | Render, realm setup, catalogue seeding and synchronization |
+| `ghcr.io/scorelabus/scoretech-identity-tooling` | Render, realm setup and database catalogue initialization |
 
 Account and Admin web assets continue using the shared gateway; this preserves the
 existing single-origin architecture. All five images receive `main` and
@@ -74,8 +74,8 @@ public. Otherwise log in on the server using a GitHub account and personal acces
 docker login ghcr.io --username YOUR_GITHUB_USER
 ```
 
-Paste the read token only at the password prompt. The runtime GitHub App used for
-catalogue editing is a separate credential; it is not replaced by `GITHUB_TOKEN`.
+Paste the read token only at the password prompt. GitHub is used to publish/download
+images and releases; the runtime permission catalogue has no GitHub dependency.
 If a package already existed outside this workflow, connect it to this repository
 and grant its Actions workflows access before publishing.
 
@@ -94,7 +94,7 @@ repository root:
 git switch main
 git pull --ff-only origin main
 docker compose -f docker/production/compose.yaml pull
-docker compose -f docker/production/compose.yaml up -d --no-build --wait --wait-timeout 300
+docker compose -f docker/production/compose.yaml up -d --no-build --remove-orphans --wait --wait-timeout 300
 ```
 
 A failed/partial image publication never creates a GitHub release. Full SHA tags
@@ -111,7 +111,7 @@ First merge the reviewed Identity release into `main` and wait for CI, all five
 GHCR jobs and the GitHub release to finish. On the server, clone the `main` branch
 and keep that branch checked out.
 The SPHERE integration must also be present in the deployed SPHERE release
-([PR #205](https://github.com/SCORELabUS/SPHERE/pull/205), targeting `develop`).
+([PR #207](https://github.com/SCORELabUS/SPHERE/pull/207), merged into `main`).
 Do not switch production to an unmerged/unreleased frontend or gateway.
 
 From the Identity repository root:
@@ -127,20 +127,16 @@ or rotates existing credentials. Edit that file and replace every placeholder:
 - `IDENTITY_VERSION=main`; keep the server repository on `main`.
 - Public origin and matching WebAuthn RP ID (initially `sphere.score.us.es`).
 - First operator email, Brevo SMTP login/key and authenticated sender.
-- GitHub App ID, installation ID and catalogue repository/branch. Grant the App
-  repository contents read/write access. The repository must have `main`.
-- Published terms/privacy URLs, versions and SHA-256 digests of those versions.
 - Existing SPHERE Docker network name. With SPHERE's current production Compose
   directory/project it is `production_sphere-network`; check `docker network ls`
   if a custom project name is used.
 
-Install the App's PEM key at `docker/production/secrets/github-app.pem`, or change
-`IDENTITY_GITHUB_KEY_FILE`. Paths in `.env` are repository-relative; absolute paths
-also work. On Linux the key must be readable by container UID 1000, with mode 0600
-and a private parent directory; use `sudo chown 1000:1000` as appropriate. Never
-make it world-readable. Compose mounts each secret only in its consumers. The
-remaining credentials are read from `.env` and mounted as `/run/secrets/*`, not
-passed to the API containers as plaintext environment variables.
+There is no GitHub App to install and no legal URL/version/hash to configure.
+Roles, permissions, application rules and history live in PostgreSQL through
+Keycloak. Public legal pages are rendered at `/identity/legal/terms` and
+`/identity/legal/privacy` from the bundled `legal/documents.json`; registration
+references are derived automatically. Internal and Brevo credentials are mounted
+as `/run/secrets/*` only in their consumers.
 
 If upgrading an existing deployment that used separate secret files, copy the
 **existing** values into the corresponding `.env` keys instead of using newly
@@ -166,17 +162,17 @@ SPHERE must already be running so its shared Docker network exists. Then:
 ```bash
 cd docker/production
 docker compose pull
-docker compose up -d --no-build --wait --wait-timeout 300
+docker compose up -d --no-build --remove-orphans --wait --wait-timeout 300
 ```
 
 Plain `docker compose up -d` also pulls the selected release and starts the full
 triplet. An explicit `pull` first checks that every image is available before
 changing running services. No compilation tools are required on the server.
 Startup renders configuration, initializes a missing realm, reconciles managed
-settings, initializes a missing GitHub catalogue, waits for verified application,
-and then starts both APIs and the gateway. Existing users, credentials and
-catalogue revisions are preserved. Initial catalogue seeding writes to GitHub
-only when the selected environment does not yet exist.
+settings, initializes only a missing database catalogue, and then starts both
+APIs and the gateway. Existing users, credentials, application clients, role IDs
+and catalogue revisions are preserved. Admin changes become active atomically
+with their database audit entry.
 
 Only Identity's gateway joins SPHERE's network, as `scoretech-identity-gateway`.
 PostgreSQL, Keycloak, API ports and native administration stay private. The
@@ -264,7 +260,7 @@ volumes intact. From `docker/production`:
 
 ```bash
 docker compose pull
-docker compose up -d --no-build --wait --wait-timeout 300
+docker compose up -d --no-build --remove-orphans --wait --wait-timeout 300
 docker compose ps
 ```
 
@@ -278,7 +274,7 @@ validated backup/restore procedure. Never use `down -v` for deployment or rollba
 
 ```bash
 docker compose ps
-docker compose logs --tail=100 render realm-setup catalogue-seed config-sync
+docker compose logs --tail=100 render realm-setup catalogue-init
 docker compose down
 ```
 
@@ -295,7 +291,7 @@ in Identity need a local method if they must use SPHERE after rollback.
 Verify the public discovery issuer, OTP delivery, passkeys, both external
 providers, Account/Admin SSO, permission enforcement, session renewal and
 backup/restore on the target HTTPS host before opening production traffic. Local
-tests do not certify live Brevo, GitHub installation access or approved US login.
+tests do not certify live Brevo or approved US login.
 
 Deployment regression checks (Node 24/pnpm on the development host):
 
@@ -308,3 +304,22 @@ The first-boot test needs the lab images built by `./lab up`; it creates a uniqu
 Docker project and empty runtime, checks real HTTP boundaries and repeat startup,
 then removes only its own disposable data. It never mounts the existing `.lab`
 or uses the existing database/avatar volumes.
+
+## First production configuration after v0.1.0
+
+An already-generated `.env` is preserved. Keep its five internal credentials,
+public origin/RP ID, bootstrap email, Brevo values and SPHERE network. You may
+remove `IDENTITY_GITHUB_*`, `IDENTITY_CATALOGUE_*`, `IDENTITY_TERMS_*` and
+`IDENTITY_PRIVACY_*`; none is required or consumed by Compose. No PEM file is needed.
+
+For an existing local lab, `./lab up` removes obsolete fixture/synchronizer
+containers and imports the last verified legacy snapshot and its history into
+PostgreSQL once. It refuses conflicting or tampered legacy state. Keep `.lab/`
+and volumes. Initializers on later starts retain the current database catalogue.
+Do not restart an old synchronizer against the upgraded database.
+
+This release adds a catalogue audit table without deleting or replacing users,
+roles, invitations, clients or credentials. Back up PostgreSQL before upgrades.
+To return to the older Git-authoritative implementation, restore the matching
+pre-upgrade database/configuration backup rather than allowing the old writer
+to overwrite newer database edits. A normal application restart is not a rollback.

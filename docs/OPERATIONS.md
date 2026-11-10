@@ -64,34 +64,32 @@ volume and `.lab/` files. Those contain local identities, passkeys, catalogue
 revisions and local-only credentials; they are ignored by Git. Do not delete
 volumes as an ordinary stop/restart procedure.
 
-The catalogue fixture implements the GitHub protocol used by Admin and config-sync
-inside the Compose network. It is not a public endpoint or production backend.
-The gateway refreshes Docker DNS for recreated services. Realm setup, catalogue
-synchronization and administrative mutations share the same kernel lock file;
-preserve that file and its inode across rendering/restarts.
-Saving roles in the lab creates versioned catalogue changes; the synchronizer
-applies the real provider registry and reports the observed revision.
+The catalogue is stored in PostgreSQL and managed through the provider's private
+`score-catalogue` API. Role/permission changes and their audit history commit in
+one native transaction. A once-only initializer imports an existing local lab's
+verified legacy catalogue/history; subsequent starts retain the current database
+state. No GitHub App, fixture service or background synchronizer is required.
+The gateway refreshes Docker DNS for recreated services. Deployment and Admin
+mutations retain their shared kernel lock file; preserve its inode.
 
 ## Production prerequisites, secrets and startup
 
 The canonical deployment instructions are in [docker/README.md](../docker/README.md).
-Use `./docker/setup production`, configure `docker/production/.env` and the GitHub
-App PEM, then run Compose from `docker/production`. Staging has an independent
+Use `./docker/setup production`, configure `docker/production/.env`, then run Compose from `docker/production`. Staging has an independent
 entry point and state. The Docker guide also covers preparation preview, shared
 SPHERE networking, both callbacks and rollback.
 
 Compose now mounts internal/Brevo credentials from the private `.env` as secrets.
 For existing deployments using individual secret files, transfer their **existing
 values** to the corresponding `.env` variables; do not change persisted database
-or service credentials. The GitHub PEM remains a mounted private file readable by
-UID 1000. Runtime private files remain restricted; public configuration lives only
+or service credentials. Runtime private files remain restricted; public configuration lives only
 in the `web` subdirectory. Native bootstrap access stays private and separate from
 the first SCORE operator, who proves email ownership and enrolls a passkey.
 
-Rendering, initial catalogue seeding and realm reconciliation now run automatically
-as startup dependencies. Seeding creates only a missing environment catalogue in
-the configured GitHub repository; existing revisions/users/credentials are retained.
-The first seed is an external write when the operator starts the configured stack.
+Rendering, native realm reconciliation and database catalogue initialization run
+automatically as startup dependencies. Existing users, credentials, roles and
+audit history are retained. Public terms/privacy are bundled and rendered under
+`/identity/legal/`; no external legal host or operator-supplied digests are needed.
 
 For maintenance examples later in this guide, define from the repository root:
 
@@ -102,8 +100,8 @@ production() {
 }
 ```
 
-Pin the source release and back up persistent state before upgrades. First startup
-requires the existing SPHERE network. Verify actual HTTPS, Brevo, GitHub permissions,
+Keep the server on released main and back up persistent state before upgrades. First startup
+requires the existing SPHERE network. Verify actual HTTPS, Brevo,
 external SSO and backup/restore on the target host before admitting real traffic.
 
 ## HTTPS reverse proxy and public URLs
@@ -163,13 +161,11 @@ Do not treat an arbitrary base-path environment change as a completed deployment
 
 ## Catalogue publishing and authority
 
-Install a real GitHub App on the one configured SCORE catalogue repository, with
-repository `Contents: write` and the installation/private-key settings from the
-env/secret files. The adapter requests an installation token limited to that
-repository and permission. Ensure repository policy allows the intended direct
-catalogue commits. Do not grant unrelated repository/workflow administration.
-GitHub's contents permission is repository-scoped; the application's path/branch
-restrictions are additional checks, not a GitHub per-path permission.
+PostgreSQL/Keycloak owns the live catalogue and its revision history. Admin uses
+the private native service API, which enforces a compare-and-save revision check
+and commits the role graph, token scope changes, application rules and audit
+record in one database transaction. `baseSha` remains the API field name for
+compatibility, but is now a 64-character database revision identifier, not a Git SHA.
 
 Admin edits role definitions and assigns roles to users through separate
 operations. A live protected identity administrator can also declare new atomic
@@ -208,32 +204,17 @@ and `default-roles-*` are also reserved. The server derives the protected
 role's references manually. Public-registration defaults remain unprivileged and
 cannot grant protected-service access.
 
-Every publication includes a reason of at least eight characters and its base
-revision for conflict detection. The UI distinguishes a saved desired revision
-from verified application: it polls application status for up to 60 seconds and
-requires both `state: applied` and an `observedRevision` matching the published
-revision for this environment. It renews the operator's session after verification
-so newly active administrator permissions become available. A failed or timed-out
-application remains a saved desired change; review its status and correct it
-instead of treating the save as successful enforcement.
+Every change includes a reason of at least eight characters and the base database
+revision. A successful save is active immediately; stale editors receive 409 and
+a failed native write rolls back the registry, roles and audit entry together.
+History is stored in `SCORE_CATALOGUE_REVISION` and restores are new audited changes.
+Account and Admin read the live database catalogue, never a generated projection.
 
-Config-sync polls the configured branch, verifies the snapshot digest and
-reconciles the provider authorization registry. It releases the active projection
-only after verifying the observed revision. APIs consume the applied catalogue,
-not an unverified pending Git HEAD. Keep the runtime catalogue directory persistent
-and do not edit generated JSON by hand. A failed publication/application requires
-investigation/retry; it must not be reported as success.
-
-The sync client also performs deployment realm reconciliation and carries powerful
-realm/client-management capability. Keep its secret with deployment tooling,
-separate from Admin API, Account API and browser credentials. It is not a normal
-read-only integration key. Administrative mutations use an in-process queue and a
-shared kernel `flock` with config-sync. The lock covers the full operation even
-after a browser disconnects; it is released when its owning process dies. Native
-application and verified projection publication happen within the same lock.
-Failed/incomplete application blocks account mutations until verification recovers;
-catalogue repair remains available. Keep the coordination file mount shared and
-writable by the legitimate participants; do not replace its inode while running.
+The deployment setup client retains realm/client-management capability for
+once-only managed configuration, separate from normal browser credentials. Admin
+mutations retain their process queue and kernel `flock` for user-management
+coordination and fresh live-authority checks. Native catalogue saves also use the
+provider transaction lock. Preserve the shared coordination file inode.
 
 The supported deployment uses **one Admin API process/replica**. Before distributing
 replicas across hosts, implement and verify coordination on the chosen shared
@@ -441,7 +422,7 @@ explicitly. For an authorized restore of this stack, stop writers before running
 reviewed against the restore point:
 
 ```bash
-production stop gateway account-api admin-api config-sync realm-setup keycloak
+production stop gateway account-api admin-api catalogue-init realm-setup keycloak
 production up -d database
 production exec -T database pg_restore -U keycloak -d keycloak \
   --clean --if-exists --exit-on-error --single-transaction < "$backup_file"
