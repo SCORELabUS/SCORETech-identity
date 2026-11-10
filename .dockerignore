@@ -9,3 +9,6 @@
 **/test-results
 **/*.log
 .identity-runtime
+
+.identity-staging-runtime/
+**/secrets/

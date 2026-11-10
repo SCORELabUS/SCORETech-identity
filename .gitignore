@@ -14,3 +14,6 @@ playwright-report/
 .DS_Store
 .identity-runtime/
 vite.config.*.timestamp-*.mjs
+
+.identity-staging-runtime/
+**/secrets/

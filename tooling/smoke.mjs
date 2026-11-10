@@ -36,6 +36,8 @@ for (const endpoint of [
 }
 for (const endpoint of [
   "score-applications",
+  "score-identities",
+  "account/linked-accounts",
   "tentu-authorization/snapshot",
   "tentu-user-mutations",
   "tentu-support",

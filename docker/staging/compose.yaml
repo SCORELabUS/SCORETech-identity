@@ -1,0 +1,5 @@
+# Requires Docker Compose 2.20+ (include). All build/bind paths are repository-relative.
+name: scoretech-identity-staging
+include:
+  - path: ../../deploy/production/compose.yaml
+    project_directory: ../..
