@@ -24,7 +24,16 @@ jobs:
       - run: ./lab check
       - run: pnpm test:e2e
         env:
-          IDENTITY_E2E_CHROMIUM: '1'
+          IDENTITY_E2E_CHROMIUM: "1"
+      - run: pnpm test:e2e:sso
+        env:
+          IDENTITY_E2E_CHROMIUM: "1"
+      - run: pnpm test:e2e:session
+        env:
+          IDENTITY_E2E_CHROMIUM: "1"
+      - run: pnpm test:e2e:profile
+        env:
+          IDENTITY_E2E_CHROMIUM: "1"
       - if: always()
         run: ./lab logs
       - if: always()
