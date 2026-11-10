@@ -129,7 +129,9 @@ Docker entry points are available in `docker/development`, `docker/staging` and
 `docker/production`. Development starts with `docker compose up -d --build`;
 production/staging pull verified GHCR images and first need their private `.env`,
 GitHub App key and existing SPHERE network configured. Pushes to `main` publish
-provider, Account, Admin, gateway and tooling images after the complete CI passes. See [Docker deployment](docker/README.md) for exact
+provider, Account, Admin, gateway and tooling images after the complete CI passes,
+then create a versioned GitHub release with an incremental changelog. Production
+stays on the `main` branch and uses `IDENTITY_VERSION=main`. See [Docker deployment](docker/README.md) for exact
 commands, gateway activation, callbacks, state preservation and rollback.
 
 The initial production origin is `https://sphere.score.us.es`, served under

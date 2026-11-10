@@ -79,11 +79,27 @@ catalogue editing is a separate credential; it is not replaced by `GITHUB_TOKEN`
 If a package already existed outside this workflow, connect it to this repository
 and grant its Actions workflows access before publishing.
 
-For production, copy the verified release SHA from Actions, check out that exact
-source revision, and set `IDENTITY_VERSION=sha-<that full SHA>` in the private env.
-The checked-out Compose/configuration and the image tag must refer to the same
-release. `main` is available as a moving tag for staging or deliberate tracking.
-`IDENTITY_IMAGE_PREFIX` changes the registry/namespace when necessary.
+The server stays on the `main` branch with `IDENTITY_VERSION=main`. After each
+successful image publication, GitHub Releases gets an incremental changelog and
+links to the exact source/image revision. Release versions start at the package
+version (currently `v0.1.0`) and increase the patch automatically; raising the
+package version above the latest release selects that new base version. Retrying
+a completed source revision reuses its release instead of creating another one.
+No detached checkout or routine `.env` version edit is required.
+
+Wait until the latest main commit has a completed release, then update from the
+repository root:
+
+```bash
+git switch main
+git pull --ff-only origin main
+docker compose -f docker/production/compose.yaml pull
+docker compose -f docker/production/compose.yaml up -d --no-build --wait --wait-timeout 300
+```
+
+A failed/partial image publication never creates a GitHub release. Full SHA tags
+remain available for incident diagnosis and deliberate rollback; normal deployment
+uses the main tag. `IDENTITY_IMAGE_PREFIX` changes the registry/namespace if needed.
 
 Production/staging Compose contains no source builds. Gateway configuration is
 inside the published gateway image. Initializers use the published tooling image.
@@ -91,8 +107,9 @@ The development lab retains its source builds and private local state.
 
 ## Production: configure once, then Compose
 
-First merge the reviewed Identity release into `main` and wait for CI and all
-five GHCR jobs to finish. On the server, clone/check out that published commit.
+First merge the reviewed Identity release into `main` and wait for CI, all five
+GHCR jobs and the GitHub release to finish. On the server, clone the `main` branch
+and keep that branch checked out.
 The SPHERE integration must also be present in the deployed SPHERE release
 ([PR #205](https://github.com/SCORELabUS/SPHERE/pull/205), targeting `develop`).
 Do not switch production to an unmerged/unreleased frontend or gateway.
@@ -107,7 +124,7 @@ This creates `docker/production/.env` with five distinct, random internal
 credentials and owner-only permissions. It never overwrites an existing `.env`
 or rotates existing credentials. Edit that file and replace every placeholder:
 
-- `IDENTITY_VERSION=sha-<published full SHA>` and the corresponding source checkout.
+- `IDENTITY_VERSION=main`; keep the server repository on `main`.
 - Public origin and matching WebAuthn RP ID (initially `sphere.score.us.es`).
 - First operator email, Brevo SMTP login/key and authenticated sender.
 - GitHub App ID, installation ID and catalogue repository/branch. Grant the App
@@ -241,8 +258,8 @@ users link their accounts; bulk migration is not implemented by this deployment.
 
 For an Identity update, first back up its PostgreSQL, private runtime/configuration
 and avatar volume using `docs/OPERATIONS.md`. Record the current source SHA and
-image tag, fetch/check out the newly published revision, and change only the release
-tag in the private `.env`. Keep all credentials, project names and persistent
+latest release, then pull the released main branch. Keep `IDENTITY_VERSION=main`;
+routine updates do not require a checkout to a SHA or a tag edit. Keep all credentials, project names and persistent
 volumes intact. From `docker/production`:
 
 ```bash
@@ -252,8 +269,8 @@ docker compose ps
 ```
 
 Verify the public issuer, email delivery, passkey login, both portals and catalogue
-publication before completing the change. To return to a previous application
-release, restore its matching source checkout/image tag. If a provider upgrade
+publication before completing the change. For a deliberate rollback to a previous application
+release, use a reviewed revert on main or the recorded source/image pair. If a provider upgrade
 changed the database schema, image rollback alone is insufficient: follow the
 validated backup/restore procedure. Never use `down -v` for deployment or rollback.
 

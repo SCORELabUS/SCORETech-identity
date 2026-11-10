@@ -140,8 +140,10 @@ GHCR artifacts are provider, account, admin, gateway and tooling, each tagged
 `main` and `sha-<full source SHA>` for amd64/arm64. Production/staging pull these
 artifacts without source builds; the development lab still builds locally.
 Keep runtime secret material out of build contexts, matrix inputs and cache.
-Do not publish or deploy an incomplete artifact set or silently move production
-to a different source/image revision. Actual GHCR execution needs a verified main
+The server stays on main with `IDENTITY_VERSION=main`. Create a GitHub release
+with an incremental changelog only after all image jobs succeed. Keep release
+creation idempotent for retries of the same source SHA. Do not publish a release
+for an incomplete artifact set; wait for the released main revision before updating. Actual GHCR execution needs a verified main
 push; local Docker builds are not proof that publication ran on GitHub.
 
 ## Secrets, deployment and state preservation
