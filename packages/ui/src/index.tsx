@@ -22,6 +22,9 @@ import {
   Check,
   AlertCircle,
 } from "lucide-react";
+import { Avatar, type AvatarValue } from "./avatar";
+export { Avatar, avatarPalette, avatarChoices, avatarColor } from "./avatar";
+export type { AvatarValue } from "./avatar";
 import { config, useAuth } from "./auth";
 export { config, useAuth, useResource, AuthProvider } from "./auth";
 export type { IdentityConfig } from "./auth";
@@ -345,28 +348,42 @@ export function Shell({
   const accountMenu = useRef<HTMLDetailsElement>(null);
   const [error, setError] = useState("");
   const [showAdministration, setShowAdministration] = useState(false);
+  const [accountProfile, setAccountProfile] = useState<{
+    firstName?: string;
+    lastName?: string;
+    avatar?: AvatarValue;
+    profile?: { displayName?: string };
+  }>();
   useEffect(() => {
-    if (config.kind !== "account" || !user) {
+    if (!user) {
       setShowAdministration(false);
       return;
     }
     let active = true;
     const update = async () => {
       try {
-        const profile = await api<{ roles: string[] }>(
-          config.accountApiUrl + "/me",
-        );
-        if (active)
+        const profile = await api<{
+          roles: string[];
+          firstName?: string;
+          lastName?: string;
+          avatar?: AvatarValue;
+          profile?: { displayName?: string };
+        }>(config.accountApiUrl + "/me");
+        if (active) {
           setShowAdministration(profile.roles.includes("administrador"));
+          setAccountProfile(profile);
+        }
       } catch {
         if (active) setShowAdministration(false);
       }
     };
     void update();
     window.addEventListener("focus", update);
+    window.addEventListener("score:profile-updated", update);
     return () => {
       active = false;
       window.removeEventListener("focus", update);
+      window.removeEventListener("score:profile-updated", update);
     };
   }, [api, user]);
   useEffect(() => {
@@ -455,19 +472,22 @@ export function Shell({
               className="identity-card cursor-pointer"
               aria-label="Account menu"
             >
-              <span className="avatar">
-                {String(
-                  user?.profile.given_name ||
-                    user?.profile.name ||
-                    user?.profile.email ||
-                    "S",
-                )
-                  .slice(0, 1)
-                  .toUpperCase()}
-              </span>
+              <Avatar
+                value={accountProfile?.avatar}
+                name={
+                  [accountProfile?.firstName, accountProfile?.lastName]
+                    .filter(Boolean)
+                    .join(" ") ||
+                  String(user?.profile.name || user?.profile.email || "S")
+                }
+              />
               <div>
                 <strong>
-                  {user?.profile.name ||
+                  {accountProfile?.profile?.displayName ||
+                    [accountProfile?.firstName, accountProfile?.lastName]
+                      .filter(Boolean)
+                      .join(" ") ||
+                    user?.profile.name ||
                     user?.profile.given_name ||
                     "SCORE member"}
                 </strong>
@@ -485,7 +505,7 @@ export function Shell({
             >
               <a
                 className="cursor-pointer"
-                href={config.accountUrl + "#profile"}
+                href={config.accountUrl + "#public-profile"}
               >
                 <UserRound size={17} /> My profile
               </a>

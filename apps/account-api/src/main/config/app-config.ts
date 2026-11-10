@@ -34,6 +34,7 @@ const EnvSchema = z.object({
   APP_ACCOUNT_CLIENT_ID: z.string().default('identity-account-web'),
   APP_ACCOUNT_PUBLIC_URL: z.string().url(),
   APP_ACTIVATION_LIFESPAN_SECONDS: z.coerce.number().int().min(300).max(86400).default(3600),
+  APP_AVATAR_DIRECTORY: z.string().min(1).optional(),
   APP_AVATAR_BUCKET: z.string().min(3).optional(),
   APP_AVATAR_REGION: z.string().default('eu-south-2'),
   APP_AVATAR_ENDPOINT: z.string().url().optional(),
@@ -42,9 +43,6 @@ const EnvSchema = z.object({
     .default('false')
     .transform((value) => value === 'true'),
   APP_AUTHORIZATION_CATALOGUE_PATH: z.string().default('/etc/identity/catalogue.json'),
-
-
-
 });
 export type AppConfig = z.infer<typeof EnvSchema>;
 export const loadConfig = (

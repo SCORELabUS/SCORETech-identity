@@ -24,6 +24,19 @@ export class AvatarStorage {
     this.client = new S3Client({ region, ...options });
   }
 
+  public async save(subject: string, bytes: Buffer): Promise<string> {
+    const key = `avatars/${subject}/${randomUUID()}.webp`;
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: bytes,
+        ContentType: 'image/webp',
+      }),
+    );
+    return key;
+  }
+
   public async createUpload(
     subject: string,
     contentType: string,
@@ -44,7 +57,11 @@ export class AvatarStorage {
 
   public async assertOwnedImage(subject: string, key: string): Promise<void> {
     if (!key.startsWith(`avatars/${subject}/`))
-      throw new HttpError(400, 'invalid_avatar_image', 'The image does not belong to your account.');
+      throw new HttpError(
+        400,
+        'invalid_avatar_image',
+        'The image does not belong to your account.',
+      );
     try {
       const object = await this.client.send(
         new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
@@ -54,7 +71,11 @@ export class AvatarStorage {
         !object.ContentLength ||
         object.ContentLength > maxBytes
       )
-        throw new HttpError(400, 'invalid_avatar_image', 'The image does not meet the requirements.');
+        throw new HttpError(
+          400,
+          'invalid_avatar_image',
+          'The image does not meet the requirements.',
+        );
     } catch (error) {
       if (error instanceof HttpError) throw error;
       throw new HttpError(400, 'invalid_avatar_image', 'The uploaded image was not found.');

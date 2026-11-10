@@ -1338,3 +1338,21 @@ tbody tr:last-child td {
 .account-dropdown-options .account-signout:hover {
   background: color-mix(in srgb, var(--danger) 7%, var(--surface));
 }
+
+.user-avatar {
+  overflow: hidden;
+}
+.user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.user-avatar img[src^="data:image/svg"] {
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+}
+.user-avatar svg {
+  width: 65%;
+  height: 65%;
+}

@@ -8,7 +8,10 @@ info:
     signed user token with the configured issuer, audience identity-account-api, exp, sub and sid.
     No business role is required for personal account access. Effective administrative accounts must
     satisfy the provider passkey policy. Responses containing account data use Cache-Control:
-    no-store.'
+    no-store. Optional profile and social fields are stored as allowlisted Keycloak attributes, not
+    added to tokens or exposed publicly. Identity deletion uses the native score-delete-account
+    application-initiated action with fresh authentication and email confirmation, never a
+    user-selectable DELETE API.'
 servers:
   - url: /identity/api/account
     description: Public prefix for the default /identity deployment. Configure the prefix with the
@@ -16,6 +19,58 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /v1/account/identities:
+    get:
+      summary: List own external sign-in connections
+      description:
+        Returns public provider metadata and own linked username only. Never exposes provider
+        credentials. Linking and disconnection use native Keycloak application-initiated actions
+        with fresh authentication and confirmation.
+      operationId: listConnectedIdentities
+      responses:
+        '200':
+          description: Connected and available providers
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - providers
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - alias
+                        - displayName
+                        - enabled
+                        - linked
+                        - canDisconnect
+                      properties:
+                        alias:
+                          type: string
+                          enum:
+                            - google
+                            - us-sso
+                        displayName:
+                          type: string
+                        enabled:
+                          type: boolean
+                        linked:
+                          type: boolean
+                        canDisconnect:
+                          type: boolean
+                        externalUsername:
+                          type: string
+                        disconnectReason:
+                          type: string
+        '401':
+          description: Invalid or missing user session
+        '403':
+          description: Wrong client or forbidden session
+        '503':
+          description: Provider unavailable
   /v1/account/me:
     get:
       summary: Read own account
@@ -618,6 +673,98 @@ paths:
       operationId: getMetrics
       tags:
         - Operations
+  /v1/account/profile:
+    patch:
+      operationId: patchSharedProfile
+      tags:
+        - Account
+      summary: Update own shared profile or social links without changing contact data
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                profile:
+                  $ref: '#/components/schemas/SharedProfile'
+                socialLinks:
+                  $ref: '#/components/schemas/SocialLinks'
+      responses:
+        '204':
+          description: Stored on the authenticated identity
+        '400': &a1
+          description: Invalid input
+        '401': &a2
+          description: Missing or invalid user session
+        '403': &a3
+          description: Administrative passkey policy not satisfied
+        '503': &a4
+          description: Photo storage unavailable
+  /v1/account/avatar:
+    patch:
+      operationId: patchAvatar
+      tags:
+        - Account
+      summary: Choose own initials or predefined avatar, or an existing owned photo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Avatar'
+      responses:
+        '204':
+          description: Avatar saved; replaced owned photo removed
+        '400': *a1
+        '401': *a2
+        '403': *a3
+        '503': *a4
+  /v1/account/avatar-image:
+    post:
+      operationId: uploadAvatarImage
+      tags:
+        - Account
+      summary: Upload and replace own avatar photo
+      description: Authenticated binary upload, max 2 MiB and 16 million decoded pixels. The server
+        validates actual JPEG/PNG/WebP content, strips metadata and normalizes to 256x256 WebP.
+        Local Compose storage persists in the identity-avatars volume. S3 remains supported when
+        configured.
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '201':
+          description: Stored normalized avatar
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - avatar
+                properties:
+                  avatar:
+                    $ref: '#/components/schemas/PresentedAvatar'
+        '400': *a1
+        '401': *a2
+        '403': *a3
+        '413':
+          description: Image exceeds 2 MiB
+        '503': *a4
 components:
   schemas:
     Error:
@@ -674,6 +821,15 @@ components:
                 - heart
                 - leaf
                 - star
+                - avatar-1
+                - avatar-2
+                - avatar-3
+                - avatar-4
+                - avatar-6
+                - avatar-7
+                - avatar-8
+                - avatar-9
+                - avatar-10
             backgroundColor:
               $ref: '#/components/schemas/Color'
             foregroundColor:
@@ -709,20 +865,23 @@ components:
               type: string
               pattern: ^avatars/[A-Za-z0-9-]+/[A-Za-z0-9-]+\.(jpg|png|webp)$
     Color:
-      type: string
-      enum:
-        - graphite
-        - tentu
-        - stone
-        - lime
-        - paper
-        - charcoal
-        - cyan
-        - pink
-        - purple
-        - orange
-        - black
-        - white
+      oneOf:
+        - type: string
+          enum:
+            - graphite
+            - tentu
+            - stone
+            - lime
+            - paper
+            - charcoal
+            - cyan
+            - pink
+            - purple
+            - orange
+            - black
+            - white
+        - type: string
+          pattern: ^#[0-9a-fA-F]{6}$
     ProfileUpdate:
       type: object
       description: Omitted phone or avatar fields preserve their stored values.
@@ -746,6 +905,10 @@ components:
             value.
         avatar:
           $ref: '#/components/schemas/Avatar'
+        profile:
+          $ref: '#/components/schemas/SharedProfile'
+        socialLinks:
+          $ref: '#/components/schemas/SocialLinks'
     Account:
       type: object
       required:
@@ -755,6 +918,8 @@ components:
         - roles
         - permissions
         - capabilities
+        - profile
+        - socialLinks
       properties:
         id:
           type: string
@@ -788,10 +953,20 @@ components:
             avatarUpload:
               type: boolean
               description: Whether private photo storage is configured.
+            accountDeletion:
+              type: boolean
+              description:
+                Whether this account may enter native self deletion. Administrative accounts are
+                protected. Native policy rechecks at confirmation.
           required:
             - avatarUpload
+            - accountDeletion
           additionalProperties: false
           readOnly: true
+        profile:
+          $ref: '#/components/schemas/SharedProfile'
+        socialLinks:
+          $ref: '#/components/schemas/SocialLinks'
     Sessions:
       type: object
       required:
@@ -996,6 +1171,15 @@ components:
                 - heart
                 - leaf
                 - star
+                - avatar-1
+                - avatar-2
+                - avatar-3
+                - avatar-4
+                - avatar-6
+                - avatar-7
+                - avatar-8
+                - avatar-9
+                - avatar-10
             backgroundColor:
               $ref: '#/components/schemas/Color'
             foregroundColor:
@@ -1033,10 +1217,63 @@ components:
             imageUrl:
               type: string
               format: uri
-              description: Temporary signed image URL.
+              description:
+                'Private image source: an inline normalized WebP for local storage, or a temporary read
+                URL for S3. Returned only to the authenticated owner.'
       description:
         Configured avatar. A photo can additionally include a temporary read URL when private
         storage is configured.
+    SharedProfile:
+      type: object
+      additionalProperties: false
+      description:
+        Optional shared profile. The date of birth is personal metadata, not a public claim.
+        Omitted groups remain unchanged; supplied groups replace their previous values.
+      properties:
+        displayName:
+          type: string
+          maxLength: 100
+          default: ''
+        bio:
+          type: string
+          maxLength: 200
+          default: ''
+        city:
+          type: string
+          maxLength: 100
+          default: ''
+        country:
+          type: string
+          maxLength: 100
+          default: ''
+        dateOfBirth:
+          type: string
+          description: An empty string, or a real YYYY-MM-DD date between 1900-01-01 and today.
+          default: ''
+    SocialLinks:
+      type: object
+      additionalProperties: false
+      properties:
+        linkedin:
+          type: string
+          maxLength: 500
+          default: ''
+          description: Empty, or an HTTP(S) profile URL for this network. No arbitrary hosts or active URLs.
+        instagram:
+          type: string
+          maxLength: 500
+          default: ''
+          description: Empty, or an HTTP(S) profile URL for this network. No arbitrary hosts or active URLs.
+        facebook:
+          type: string
+          maxLength: 500
+          default: ''
+          description: Empty, or an HTTP(S) profile URL for this network. No arbitrary hosts or active URLs.
+        x:
+          type: string
+          maxLength: 500
+          default: ''
+          description: Empty, or an HTTP(S) profile URL for this network. No arbitrary hosts or active URLs.
   securitySchemes:
     bearerAuth:
       type: http

@@ -1,7 +1,10 @@
 import { PreferencesWriteSchema, readPreferences } from './preferences.js';
 import { createAccountRateLimit } from './rate-limit.js';
 import { describeDevice, type IdentityAccountClient } from '@scoretech/identity-internal';
-import { Router } from 'express';
+import { Router, raw } from 'express';
+import sharp from 'sharp';
+import { LocalAvatarStorage } from './local-avatar-storage.js';
+import { SharedProfileSchema, SocialLinksSchema, readSharedProfile } from './shared-profile.js';
 import { z } from 'zod';
 import type { AppConfig } from '../../config/app-config.js';
 import type { Principal } from '@scoretech/identity-internal';
@@ -10,19 +13,22 @@ import { asyncHandler } from '@scoretech/identity-internal';
 import { HttpError } from '@scoretech/identity-internal';
 import { AvatarStorage } from './avatar-storage.js';
 
-const Color = z.enum([
-  'graphite',
-  'tentu',
-  'stone',
-  'lime',
-  'paper',
-  'charcoal',
-  'cyan',
-  'pink',
-  'purple',
-  'orange',
-  'black',
-  'white',
+const Color = z.union([
+  z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  z.enum([
+    'graphite',
+    'tentu',
+    'stone',
+    'lime',
+    'paper',
+    'charcoal',
+    'cyan',
+    'pink',
+    'purple',
+    'orange',
+    'black',
+    'white',
+  ]),
 ]);
 const AvatarSchema = z.discriminatedUnion('kind', [
   z
@@ -31,7 +37,22 @@ const AvatarSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('icon'),
-      assetId: z.enum(['spark', 'rocket', 'heart', 'leaf', 'star']),
+      assetId: z.enum([
+        'spark',
+        'rocket',
+        'heart',
+        'leaf',
+        'star',
+        'avatar-1',
+        'avatar-2',
+        'avatar-3',
+        'avatar-4',
+        'avatar-6',
+        'avatar-7',
+        'avatar-8',
+        'avatar-9',
+        'avatar-10',
+      ]),
       backgroundColor: Color,
       foregroundColor: Color,
     })
@@ -63,6 +84,8 @@ const ProfileSchema = z
       .optional()
       .or(z.literal('')),
     avatar: AvatarSchema.optional(),
+    profile: SharedProfileSchema.optional(),
+    socialLinks: SocialLinksSchema.optional(),
   })
   .strict();
 export const createAccountRouter = (
@@ -123,7 +146,9 @@ export const createAccountRouter = (
         endpoint: config.APP_AVATAR_ENDPOINT,
         forcePathStyle: config.APP_AVATAR_FORCE_PATH_STYLE,
       })
-    : undefined;
+    : config.APP_AVATAR_DIRECTORY
+      ? new LocalAvatarStorage(config.APP_AVATAR_DIRECTORY)
+      : undefined;
   const legacy = {
     violet: 'graphite',
     ocean: 'tentu',
@@ -195,11 +220,48 @@ export const createAccountRouter = (
         emailVerified: user.emailVerified,
         createdTimestamp: user.createdTimestamp,
         phone: user.attributes?.tentuPhone?.[0],
+        ...readSharedProfile(user.attributes),
         avatar: await presentAvatar(subject, avatar),
-        capabilities: { avatarUpload: Boolean(storage) },
+        capabilities: {
+          avatarUpload: Boolean(storage),
+          accountDeletion: !roles.some(
+            (role) =>
+              role.name === 'administrador' ||
+              role.name === 'admin' ||
+              /^admin-web:(?:local|staging|production):access$/.test(role.name),
+          ),
+        },
         roles: [...displayRoles].sort(),
         permissions: [...permissions].sort(),
       });
+    }),
+  );
+  router.patch(
+    '/profile',
+    asyncHandler(async (request, response) => {
+      const { subject } = response.locals.principal as Principal;
+      const input = z
+        .object({
+          profile: SharedProfileSchema.optional(),
+          socialLinks: SocialLinksSchema.optional(),
+        })
+        .strict()
+        .refine(
+          (value) => value.profile !== undefined || value.socialLinks !== undefined,
+          'Provide a profile or social links.',
+        )
+        .parse(request.body);
+      const attributes: Record<string, string[]> = {};
+      if (input.profile !== undefined) attributes.scoreProfile = [JSON.stringify(input.profile)];
+      if (input.socialLinks !== undefined)
+        attributes.scoreSocialLinks = [JSON.stringify(input.socialLinks)];
+      await client.updateUser(subject, { attributes });
+      logger.info('identity account action', {
+        audit: true,
+        action: 'account.shared_profile_updated',
+        actor_id: subject,
+      });
+      response.sendStatus(204);
     }),
   );
   router.get(
@@ -227,6 +289,44 @@ export const createAccountRouter = (
         actor_id: subject,
       });
       response.status(204).end();
+    }),
+  );
+  router.get(
+    '/identities',
+    asyncHandler(async (request, response) => {
+      const bearer = request.get('authorization');
+      if (!bearer) throw new HttpError(401, 'unauthorized', 'A signed-in session is required.');
+      const upstream = await fetch(
+        `${(config.APP_KEYCLOAK_TRANSPORT_URL ?? config.APP_KEYCLOAK_ISSUER).replace(/\/$/, '')}/score-identities`,
+        {
+          headers: { Authorization: bearer },
+          redirect: 'error',
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+      if (!upstream.ok)
+        throw new HttpError(
+          upstream.status === 401 ? 401 : upstream.status === 403 ? 403 : 503,
+          'identities_unavailable',
+          'Unable to load your connected identities.',
+        );
+      const value = z
+        .object({
+          providers: z.array(
+            z.object({
+              alias: z.enum(['google', 'us-sso']),
+              displayName: z.string(),
+              enabled: z.boolean(),
+              linked: z.boolean(),
+              externalUsername: z.string().optional(),
+              canDisconnect: z.boolean(),
+              disconnectReason: z.string().optional(),
+            }),
+          ),
+        })
+        .parse(await upstream.json());
+      response.setHeader('Cache-Control', 'no-store');
+      response.json(value);
     }),
   );
   router.get(
@@ -278,7 +378,9 @@ export const createAccountRouter = (
     '/me',
     asyncHandler(async (request, response) => {
       const { subject } = response.locals.principal as Principal;
-      const { firstName, lastName, phone, avatar } = ProfileSchema.parse(request.body);
+      const { firstName, lastName, phone, avatar, profile, socialLinks } = ProfileSchema.parse(
+        request.body,
+      );
       if (avatar?.kind === 'photo') {
         if (!storage)
           throw new HttpError(
@@ -296,6 +398,8 @@ export const createAccountRouter = (
       };
       if (avatar) attributes.tentuAvatar = [JSON.stringify(avatar)];
       if (phone !== undefined) attributes.tentuPhone = phone ? [phone] : [];
+      if (profile !== undefined) attributes.scoreProfile = [JSON.stringify(profile)];
+      if (socialLinks !== undefined) attributes.scoreSocialLinks = [JSON.stringify(socialLinks)];
       await client.updateUser(subject, {
         firstName,
         lastName,
@@ -314,6 +418,88 @@ export const createAccountRouter = (
         actor_id: subject,
       });
       response.status(204).end();
+    }),
+  );
+  const saveAvatar = async (subject: string, avatar: Avatar) => {
+    const previous = readAvatar(
+      subject,
+      (await client.getUser(subject)).attributes?.tentuAvatar?.[0],
+    );
+    if (avatar.kind === 'photo') {
+      if (!storage)
+        throw new HttpError(503, 'avatar_upload_unavailable', 'Photo uploads are not configured.');
+      await storage.assertOwnedImage(subject, avatar.imageKey);
+    }
+    await client.updateUser(subject, { attributes: { tentuAvatar: [JSON.stringify(avatar)] } });
+    if (
+      storage &&
+      previous.kind === 'photo' &&
+      (avatar.kind !== 'photo' || previous.imageKey !== avatar.imageKey)
+    )
+      await storage.delete(previous.imageKey).catch(() => undefined);
+    logger.info('identity account action', {
+      audit: true,
+      action: 'account.avatar_updated',
+      actor_id: subject,
+    });
+  };
+  router.patch(
+    '/avatar',
+    asyncHandler(async (request, response) => {
+      const { subject } = response.locals.principal as Principal;
+      const avatar = AvatarSchema.parse(request.body);
+      await saveAvatar(subject, avatar);
+      response.status(204).end();
+    }),
+  );
+  router.post(
+    '/avatar-image',
+    createAccountRateLimit(20, 60_000),
+    (request, response, next) =>
+      raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '2mb' })(
+        request,
+        response,
+        (error: unknown) =>
+          next(
+            (error as { type?: string } | undefined)?.type === 'entity.too.large'
+              ? new HttpError(413, 'avatar_too_large', 'Choose an image under 2 MB.')
+              : error,
+          ),
+      ),
+    asyncHandler(async (request, response) => {
+      const { subject } = response.locals.principal as Principal;
+      if (!storage)
+        throw new HttpError(503, 'avatar_upload_unavailable', 'Photo uploads are not configured.');
+      if (!Buffer.isBuffer(request.body) || !request.body.length)
+        throw new HttpError(
+          400,
+          'invalid_avatar_image',
+          'Use a JPEG, PNG or WebP image under 2 MB.',
+        );
+      let bytes: Buffer;
+      try {
+        const image = sharp(request.body, { limitInputPixels: 16_000_000, animated: false });
+        const meta = await image.metadata();
+        if (!['jpeg', 'png', 'webp'].includes(meta.format || '') || (meta.pages || 1) > 1)
+          throw new Error('Invalid image');
+        bytes = await image
+          .rotate()
+          .resize(256, 256, { fit: 'cover' })
+          .webp({ quality: 90 })
+          .toBuffer();
+      } catch {
+        throw new HttpError(400, 'invalid_avatar_image', 'The file is not a supported image.');
+      }
+      const key = await storage.save(subject, bytes);
+      try {
+        await saveAvatar(subject, { kind: 'photo', imageKey: key });
+      } catch (error) {
+        await storage.delete(key).catch(() => undefined);
+        throw error;
+      }
+      response
+        .status(201)
+        .json({ avatar: await presentAvatar(subject, { kind: 'photo', imageKey: key }) });
     }),
   );
   router.get(
@@ -377,8 +563,12 @@ export const createAccountRouter = (
     '/avatar-upload',
     createAccountRateLimit(20, 60_000),
     asyncHandler(async (request, response) => {
-      if (!storage)
-        throw new HttpError(503, 'avatar_upload_unavailable', 'Photo uploads are not configured.');
+      if (!(storage instanceof AvatarStorage))
+        throw new HttpError(
+          503,
+          'avatar_upload_unavailable',
+          'Direct uploads are not configured. Use the avatar-image endpoint.',
+        );
       const { contentType } = z.object({ contentType: z.string() }).strict().parse(request.body);
       response.json(
         await storage.createUpload((response.locals.principal as Principal).subject, contentType),

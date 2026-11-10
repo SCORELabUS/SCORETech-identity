@@ -71,10 +71,15 @@ async function setup(
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('No port');
-  const request = (path: string, method = 'GET', body?: unknown) =>
+  const request = (
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ) =>
     fetch(`http://127.0.0.1:${address.port}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   return { client, request };
@@ -481,5 +486,143 @@ describe('account appearance preferences', () => {
     expect(client.updateUser).toHaveBeenCalledWith(actor, {
       attributes: { tentuPreferences: [JSON.stringify({ theme: 'light' })] },
     });
+  });
+});
+
+describe('connected identities', () => {
+  it('does not replace a missing user bearer with service credentials', async () => {
+    const { request } = await setup();
+    const response = await request('/identities');
+    expect(response.status).toBe(401);
+  });
+  it('forwards only the user bearer and strips unrecognized provider fields', async () => {
+    const { request } = await setup();
+    const nativeFetch = globalThis.fetch;
+    const upstream = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (String(url).endsWith('/score-identities')) {
+        expect(init?.headers).toEqual({ Authorization: 'Bearer own-user' });
+        expect(init?.redirect).toBe('error');
+        return new Response(
+          JSON.stringify({
+            providers: [
+              {
+                alias: 'google',
+                displayName: 'Google',
+                enabled: true,
+                linked: true,
+                canDisconnect: true,
+                externalUsername: 'me@example.test',
+                token: 'never-return',
+              },
+            ],
+          }),
+        );
+      }
+      return nativeFetch(url, init);
+    });
+    const response = await request('/identities', 'GET', undefined, {
+      Authorization: 'Bearer own-user',
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(JSON.stringify(await response.json())).not.toContain('never-return');
+    expect(upstream).toHaveBeenCalled();
+  });
+});
+
+describe('shared personal profile', () => {
+  it('stores and projects only the authenticated profile and social links', async () => {
+    const { request, client } = await setup();
+    const profile = {
+      displayName: 'Researcher',
+      bio: 'SCORE researcher',
+      city: 'Sevilla',
+      country: 'Spain',
+      dateOfBirth: '1990-01-01',
+    };
+    const socialLinks = {
+      linkedin: 'https://linkedin.com/in/researcher',
+      instagram: '',
+      facebook: '',
+      x: 'https://x.com/researcher',
+    };
+    expect((await request('/profile', 'PATCH', { profile, socialLinks })).status).toBe(204);
+    expect(client.updateUser).toHaveBeenCalledWith(actor, {
+      attributes: {
+        scoreProfile: [JSON.stringify(profile)],
+        scoreSocialLinks: [JSON.stringify(socialLinks)],
+      },
+    });
+    client.getUser.mockResolvedValue({
+      id: actor,
+      email: 'me@example.test',
+      attributes: {
+        private: ['secret'],
+        scoreProfile: [JSON.stringify(profile)],
+        scoreSocialLinks: [JSON.stringify(socialLinks)],
+      },
+    } as never);
+    const value = await (await request('/me')).json();
+    expect(value).toMatchObject({ profile, socialLinks, capabilities: { accountDeletion: true } });
+    expect(value).not.toHaveProperty('attributes');
+    expect(JSON.stringify(value)).not.toContain('secret');
+  });
+  it('validates dates, sizes, known social providers and prevents attribute injection', async () => {
+    const { request, client } = await setup();
+    for (const payload of [
+      {},
+      { userId: target, profile: {} },
+      { roles: ['administrador'] },
+      { profile: { dateOfBirth: '2020-02-31' } },
+      { profile: { dateOfBirth: '2999-01-01' } },
+      { profile: { bio: 'x'.repeat(201) } },
+      { socialLinks: { website: 'https://example.test' } },
+      { socialLinks: { x: 'javascript:alert(1)' } },
+      { socialLinks: { linkedin: 'https://linkedin.com.evil.test/in/me' } },
+      { socialLinks: { x: 'https://x.com@evil.test/me' } },
+    ])
+      expect((await request('/profile', 'PATCH', payload)).status).toBe(400);
+    expect(client.updateUser).not.toHaveBeenCalled();
+  });
+  it('supports clearing optional groups and preserves all omitted fields', async () => {
+    const { request, client } = await setup();
+    expect((await request('/profile', 'PATCH', { socialLinks: {} })).status).toBe(204);
+    expect(client.updateUser).toHaveBeenCalledWith(actor, {
+      attributes: {
+        scoreSocialLinks: [JSON.stringify({ linkedin: '', instagram: '', facebook: '', x: '' })],
+      },
+    });
+    expect(
+      (await request('/profile', 'PATCH', { profile: { dateOfBirth: '2000-02-29' } })).status,
+    ).toBe(204);
+    expect(client.updateUser.mock.calls[1]![1].attributes).not.toHaveProperty('scoreSocialLinks');
+  });
+  it('accepts SPHERE avatar artwork and hex colors without changing personal details', async () => {
+    const { request, client } = await setup();
+    const avatar = {
+      kind: 'icon',
+      assetId: 'avatar-9',
+      backgroundColor: '#be1d37',
+      foregroundColor: '#ffffff',
+    };
+    expect((await request('/avatar', 'PATCH', avatar)).status).toBe(204);
+    expect(client.updateUser).toHaveBeenCalledWith(actor, {
+      attributes: { tentuAvatar: [JSON.stringify(avatar)] },
+    });
+    for (const input of [
+      { ...avatar, assetId: '../../evil.svg' },
+      { ...avatar, foregroundColor: 'url(evil)' },
+      { ...avatar, userId: target },
+    ])
+      expect((await request('/avatar', 'PATCH', input)).status).toBe(400);
+  });
+  it('disables self deletion for protected and delegated administrative accounts', async () => {
+    const { request, client } = await setup();
+    for (const role of ['administrador', 'admin', 'admin-web:local:access']) {
+      client.getUserRealmEffectiveRoles.mockResolvedValue([{ id: 'role', name: role }]);
+      expect((await (await request('/me')).json()).capabilities.accountDeletion).toBe(false);
+    }
+    expect((await request('/me', 'DELETE')).status).toBe(404);
+    expect(client.deleteUser).not.toHaveBeenCalled();
   });
 });

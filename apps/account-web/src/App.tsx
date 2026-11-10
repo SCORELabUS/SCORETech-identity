@@ -11,6 +11,7 @@ import {
   ArrowRight,
   ArrowLeft,
   ChevronRight,
+  Link2,
   Sun,
   Moon,
   Check,
@@ -33,18 +34,12 @@ import {
   date,
 } from "@scoretech/ui";
 import "./account-experience.css";
-interface Profile {
-  id: string;
-  firstName?: string;
-  lastName?: string;
-  email: string;
-  emailVerified: boolean;
-  phone?: string;
-  roles: string[];
-  permissions: string[];
-  avatar: { kind: string; backgroundColor?: string; foregroundColor?: string };
-  capabilities?: { avatarUpload: boolean };
-}
+import { Avatar } from "@scoretech/ui";
+import type { Profile } from "./profile-types";
+import { SharedProfilePanel } from "./SharedProfile";
+import { DangerZone } from "./DangerZone";
+import { Globe, AlertTriangle } from "lucide-react";
+import { ConnectedIdentities } from "./ConnectedIdentities";
 interface Credential {
   id: string;
   label: string;
@@ -66,15 +61,25 @@ interface Session {
   clients?: Record<string, string>;
 }
 const items = [
-  { id: "profile", label: "Profile", icon: <UserRound /> },
+  { id: "profile", label: "Account", icon: <UserRound /> },
+  { id: "public-profile", label: "Profile", icon: <Globe /> },
   { id: "security", label: "Security", icon: <Fingerprint /> },
   { id: "sessions", label: "Devices and sessions", icon: <Monitor /> },
   { id: "appearance", label: "Preferences", icon: <Palette /> },
+  { id: "danger", label: "Danger zone", icon: <AlertTriangle /> },
 ];
 const descriptions: Record<string, [string, string]> = {
   profile: [
     "Your profile.",
     "The details that identify you across the SCORE ecosystem.",
+  ],
+  "public-profile": [
+    "A profile that feels like you.",
+    "Your avatar, personal introduction and social links.",
+  ],
+  danger: [
+    "Your identity. Your choice.",
+    "Understand and manage the closure of your central account.",
   ],
   security: [
     "A secure way in.",
@@ -92,15 +97,15 @@ const descriptions: Record<string, [string, string]> = {
 export default function App() {
   const auth = useAuth();
   const [section, setSection] = useState(() =>
-    items.some((i) => i.id === location.hash.slice(1))
-      ? location.hash.slice(1)
+    items.some((i) => i.id === location.hash.slice(1).split("/")[0])
+      ? location.hash.slice(1).split("/")[0]
       : "profile",
   );
   useEffect(() => {
     const changed = () =>
       setSection(
-        items.some((i) => i.id === location.hash.slice(1))
-          ? location.hash.slice(1)
+        items.some((i) => i.id === location.hash.slice(1).split("/")[0])
+          ? location.hash.slice(1).split("/")[0]
           : "profile",
       );
     window.addEventListener("hashchange", changed);
@@ -128,6 +133,10 @@ export default function App() {
     >
       {section === "profile" ? (
         <ProfilePanel />
+      ) : section === "public-profile" ? (
+        <SharedProfilePanel />
+      ) : section === "danger" ? (
+        <DangerZone />
       ) : section === "security" ? (
         <SecurityPanel />
       ) : section === "sessions" ? (
@@ -173,6 +182,7 @@ function ProfileForm({
           phone,
         }),
       });
+      window.dispatchEvent(new Event("score:profile-updated"));
       onSaved();
     });
   };
@@ -185,9 +195,13 @@ function ProfileForm({
       >
         <div className="list-row" style={{ paddingTop: 0, marginBottom: 22 }}>
           <div className="list-row-leading">
-            <span className="avatar avatar-large">
-              {(firstName || profile.email).slice(0, 1).toUpperCase()}
-            </span>
+            <Avatar
+              value={profile.avatar}
+              name={
+                [firstName, lastName].filter(Boolean).join(" ") || profile.email
+              }
+              className="avatar-large"
+            />
             <div>
               <h3>
                 {[firstName, lastName].filter(Boolean).join(" ") ||
@@ -276,12 +290,24 @@ function ProfileForm({
     </>
   );
 }
-type SecurityMethod = "passkeys" | "authenticator" | "email";
+type SecurityMethod = "passkeys" | "authenticator" | "email" | "identities";
 function SecurityPanel() {
   const { user, accountAction } = useAuth();
   const resource = useResource<Security>(config.accountApiUrl + "/security");
   const task = useTask();
-  const [method, setMethod] = useState<SecurityMethod>();
+  const [method, setMethod] = useState<SecurityMethod | undefined>(() =>
+    location.hash === "#security/identities" ? "identities" : undefined,
+  );
+  useEffect(() => {
+    const changed = () => {
+      if (location.hash.startsWith("#security"))
+        setMethod(
+          location.hash === "#security/identities" ? "identities" : undefined,
+        );
+    };
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
   const [remove, setRemove] = useState<Credential>();
   const detailHeading = useRef<HTMLHeadingElement>(null);
   const methodButtons = useRef<
@@ -322,6 +348,16 @@ function SecurityPanel() {
           label: "Manage authenticator app",
         },
         {
+          id: "identities" as const,
+          title: "Connected identities",
+          icon: <Link2 size={27} />,
+          description:
+            "Google and Universidad de Sevilla, linked to one account.",
+          count: "External sign-in providers",
+          status: "Manage connections",
+          label: "Manage connected identities",
+        },
+        {
           id: "email" as const,
           title: "Email codes",
           icon: <Mail size={27} />,
@@ -333,6 +369,15 @@ function SecurityPanel() {
       ]
     : [];
   const selected = methods.find((item) => item.id === method);
+  if (method === "identities")
+    return (
+      <ConnectedIdentities
+        onBack={() => {
+          location.hash = "security";
+          setMethod(undefined);
+        }}
+      />
+    );
   return (
     <>
       {task.feedback}
@@ -511,7 +556,11 @@ function SecurityPanel() {
                     className="security-method-card cursor-pointer"
                     key={item.id}
                     aria-label={item.label}
-                    onClick={() => setMethod(item.id)}
+                    onClick={() => {
+                      if (item.id === "identities")
+                        location.hash = "security/identities";
+                      setMethod(item.id);
+                    }}
                     ref={(element) => {
                       methodButtons.current[item.id] = element;
                     }}

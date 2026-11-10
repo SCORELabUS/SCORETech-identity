@@ -12,6 +12,7 @@ RUN pnpm -r build
 FROM workspace AS api
 RUN rm -rf tooling config tests && find apps packages -type d -name tests -prune -exec rm -rf '{}' +
 ENV NODE_ENV=production
+RUN mkdir -p /var/lib/identity-avatars && chown node:node /var/lib/identity-avatars
 USER node
 CMD ["node", "apps/account-api/dist/main/main.js"]
 FROM workspace AS tooling
