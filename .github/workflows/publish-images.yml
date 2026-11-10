@@ -113,3 +113,26 @@ jobs:
           set -Eeuo pipefail
           printf '### %s\n\n- `%s:main`\n- `%s:sha-%s`\n' \
             "$IMAGE" "$IMAGE" "$IMAGE" "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  github-release:
+    name: Publish release and changelog
+    needs: [release, publish]
+    if: needs.release.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out source and changelog history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Create source-bound release with incremental changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tooling/publish-release.mjs

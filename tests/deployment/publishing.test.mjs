@@ -65,7 +65,7 @@ test("GHCR publication is gated by successful main verification with bounded per
   );
   assert.equal(ci.jobs.publish.uses, "./.github/workflows/publish-images.yml");
   assert.deepEqual(ci.jobs.publish.permissions, {
-    contents: "read",
+    contents: "write",
     packages: "write",
   });
   assert.ok(Object.hasOwn(publish.on, "workflow_call"));
@@ -147,6 +147,16 @@ test("published targets cover every owned production image and include the produ
     undefined,
     "Production runtime secrets never enter the image build",
   );
+  const release = publish.jobs["github-release"];
+  assert.deepEqual(release.needs, ["release", "publish"]);
+  assert.deepEqual(release.permissions, { contents: "write" });
+  assert.equal(release.if, "needs.release.outputs.publish == 'true'");
+  const checkout = release.steps.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  assert.equal(checkout.with["fetch-depth"], 0);
+  for (const step of release.steps.filter((step) => step.uses))
+    assert.match(step.uses, /@[a-f0-9]{40}$/);
   const runtime = await read("deploy/Runtime.Dockerfile");
   assert.match(
     runtime,
