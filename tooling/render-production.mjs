@@ -67,6 +67,9 @@ export async function renderProduction(env = process.env) {
     required(env, "BREVO_SENDER_EMAIL"),
     "BREVO_SENDER_EMAIL",
   );
+  const smtpPort = env.BREVO_SMTP_PORT?.trim() || "587";
+  if (!["587", "2525", "465"].includes(smtpPort))
+    throw new Error("BREVO_SMTP_PORT must be 587, 2525 or 465.");
   const legalDocuments = legalReferences(c.origin);
   const [admin, account, sync, smtpLogin, smtpKey] = await Promise.all([
     readSecret(env, "IDENTITY_ADMIN_SECRET_FILE"),
@@ -90,14 +93,14 @@ export async function renderProduction(env = process.env) {
     serviceSecrets: { admin, account, sync },
     smtp: {
       host: "smtp-relay.brevo.com",
-      port: "465",
+      port: smtpPort,
       from: sender,
       fromDisplayName: env.BREVO_SENDER_NAME?.trim() || "SCORETech Identity",
       user: smtpLogin,
       password: smtpKey,
       auth: "true",
-      ssl: "true",
-      starttls: "false",
+      ssl: smtpPort === "465" ? "true" : "false",
+      starttls: smtpPort === "465" ? "false" : "true",
     },
     legalDocuments,
     // The first operator proves their email through OTP and enrols a passkey in the normal flow.

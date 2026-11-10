@@ -282,8 +282,9 @@ test("production rendering keeps secrets private and emits only public deploymen
       assert.ok(!html.includes(secret));
   }
   assert.equal(realm.smtpServer.password, values["smtp-key"]);
-  assert.equal(realm.smtpServer.ssl, "true");
-  assert.equal(realm.smtpServer.port, "465");
+  assert.equal(realm.smtpServer.ssl, "false");
+  assert.equal(realm.smtpServer.starttls, "true");
+  assert.equal(realm.smtpServer.port, "587");
   const operator = realm.users.find((user) => !user.serviceAccountClientId);
   assert.equal(operator.email, env.IDENTITY_BOOTSTRAP_EMAIL);
   assert.equal(operator.emailVerified, false);
@@ -353,5 +354,22 @@ test("rerendering preserves legacy catalogue files for one-time database migrati
       name,
     );
   }
+  assert.equal(fetch.mock.callCount(), 0);
+});
+
+test("production SMTP selects STARTTLS for submission ports and implicit TLS only for 465", async (t) => {
+  const { env, fetch } = await productionFixture(t);
+  for (const port of ["587", "2525", "465"]) {
+    const { realm } = await renderProduction({ ...env, BREVO_SMTP_PORT: port });
+    assert.equal(realm.smtpServer.port, port);
+    assert.equal(realm.smtpServer.ssl, port === "465" ? "true" : "false");
+    assert.equal(realm.smtpServer.starttls, port === "465" ? "false" : "true");
+    assert.equal(realm.smtpServer.auth, "true");
+  }
+  for (const port of ["25", "0", "587x", "465.0", "65536"])
+    await assert.rejects(
+      renderProduction({ ...env, BREVO_SMTP_PORT: port }),
+      /BREVO_SMTP_PORT/,
+    );
   assert.equal(fetch.mock.callCount(), 0);
 });

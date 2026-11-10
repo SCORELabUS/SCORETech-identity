@@ -187,6 +187,7 @@ test(
         model.secrets.account_client.environment,
         "IDENTITY_ACCOUNT_CLIENT_SECRET",
       );
+      assert.equal(model.services.render.environment.BREVO_SMTP_PORT, "587");
       assert.equal(model.services.render.profiles, undefined);
       assert.equal(model.services["catalogue-init"].profiles, undefined);
     }
