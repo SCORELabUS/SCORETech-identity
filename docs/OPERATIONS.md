@@ -72,120 +72,39 @@ preserve that file and its inode across rendering/restarts.
 Saving roles in the lab creates versioned catalogue changes; the synchronizer
 applies the real provider registry and reports the observed revision.
 
-## Production prerequisites and secrets
+## Production prerequisites, secrets and startup
 
-Read [.env.production.example](../.env.production.example) and
-[production Compose](../deploy/production/compose.yaml) before preparing a host.
-The initial public origin is `https://sphere.score.us.es`, with the triplet under
-`/identity` and realm `score`. The production gateway only listens on host loopback
-port 18010 by default; an existing HTTPS reverse proxy must route the public
-prefix to it. PostgreSQL and the provider have no published host ports.
+The canonical deployment instructions are in [docker/README.md](../docker/README.md).
+Use `./docker/setup production`, configure `docker/production/.env` and the GitHub
+App PEM, then run Compose from `docker/production`. Staging has an independent
+entry point and state. The Docker guide also covers preparation preview, shared
+SPHERE networking, both callbacks and rollback.
 
-Prepare a separate environment and runtime directory; never reuse `.lab/` as
-production state. Pin the source release being built. Fill the public values in
-`.env.production`, including the first operator email, WebAuthn RP ID, GitHub App
-installation, authenticated sender and published terms/privacy URLs, versions and
-SHA-256 document digests. Rendering validates the references' shape; it does not
-fetch or certify those documents. The local legal fixture is not a production
-terms/privacy publication.
+Compose now mounts internal/Brevo credentials from the private `.env` as secrets.
+For existing deployments using individual secret files, transfer their **existing
+values** to the corresponding `.env` variables; do not change persisted database
+or service credentials. The GitHub PEM remains a mounted private file readable by
+UID 1000. Runtime private files remain restricted; public configuration lives only
+in the `web` subdirectory. Native bootstrap access stays private and separate from
+the first SCORE operator, who proves email ownership and enrolls a passkey.
 
-Set `IDENTITY_SECRETS_DIR` to a private absolute directory containing these files:
+Rendering, initial catalogue seeding and realm reconciliation now run automatically
+as startup dependencies. Seeding creates only a missing environment catalogue in
+the configured GitHub repository; existing revisions/users/credentials are retained.
+The first seed is an external write when the operator starts the configured stack.
 
-| File                 | Contents / consumer                                       |
-| -------------------- | --------------------------------------------------------- |
-| `database-password`  | PostgreSQL password, also read by Keycloak                |
-| `bootstrap-password` | Initial native Keycloak operations administrator password |
-| `admin-client`       | Secret for `identity-admin-service`                       |
-| `account-client`     | Different secret for `identity-account-service`           |
-| `sync-client`        | Different secret for `identity-config-sync`               |
-| `github-app.pem`     | GitHub App private key in PEM format                      |
-| `brevo-smtp-login`   | Brevo SMTP login                                          |
-| `brevo-smtp-key`     | Brevo SMTP key                                            |
-
-Use distinct service-client credentials. Store single-line credentials without
-embedded newlines; the PEM private key retains its normal multiline format. The
-Compose file mounts each secret separately. Never put secret values in the env
-file, catalogue, image, shell arguments or Git.
-
-The APIs and Keycloak run as UID 1000. On a Linux deployment, arrange the mounted
-secret files to be readable by that UID, with owner-only mode `0600` and a private
-host directory (`0700`). For example, after provisioning the files through your
-secret manager, an operator can set ownership and permissions for the chosen
-private directory:
-
-```bash
-secret_dir=/absolute/private/score-identity-secrets
-sudo chown 1000:1000 "$secret_dir" "$secret_dir"/*
-sudo chmod 0700 "$secret_dir"
-sudo chmod 0600 "$secret_dir"/*
-```
-
-Use the same absolute path for `IDENTITY_SECRETS_DIR` in `.env.production`. Check
-container readability if the host's secret mechanism changes ownership/mount
-semantics; making the key world-readable is not the remedy. Rendered private files
-in `.identity-runtime/` are also credentials-bearing: preserve their restricted
-ownership/modes. Only runtime web configuration is public.
-
-The native Keycloak bootstrap administrator is separate from an identity operator
-in the `score` realm. The generated first SCORE operator starts with unverified
-email, proves ownership by email OTP, and enrolls a passkey in the normal login
-flow. Custody of native bootstrap access is an operations responsibility; do not
-seed a shared password into SCORE users or expose the native console publicly.
-
-## First production setup order
-
-These are manual deployment instructions, not commands already executed by the
-implementation work. From the repository root:
-
-```bash
-cp .env.production.example .env.production
-# Provision the secret files and fill every placeholder in .env.production.
-```
-
-Use this helper so paths, build contexts and the env file resolve from the root:
+For maintenance examples later in this guide, define from the repository root:
 
 ```bash
 production() {
-  docker compose --project-directory "$PWD" \
-    --env-file .env.production \
-    -f deploy/production/compose.yaml "$@"
+  docker compose --project-directory "$PWD/docker/production" \
+    -f "$PWD/docker/production/compose.yaml" "$@"
 }
 ```
 
-Then build, render, initialize the remote catalogue, and start, in that order:
-
-```bash
-production --profile setup build render keycloak account-api gateway
-production --profile setup run --rm --no-deps render
-production --profile setup run --rm --no-deps catalogue-seed
-production up -d --wait --wait-timeout 300
-production ps
-```
-
-`render` creates `.identity-runtime/import/score-realm.json`, the initial catalogue
-seed and public web configuration. It reads private secret files but does not
-contact Keycloak, Brevo, GitHub or the document URLs. It refuses known local fixture
-credentials/runtime state.
-
-`catalogue-seed` is the first external write: it uses the configured GitHub App to
-create the selected catalogue branch from the repository's trusted `main` branch
-when missing, and publishes the initial environment catalogue when missing. The
-repository and `main` must exist and the installation must have access. An existing
-environment catalogue is left intact; this is not an overwrite/reset command.
-
-Startup then initializes PostgreSQL/Keycloak, runs `realm-setup`, starts the
-catalogue synchronizer, and waits for the applied catalogue before starting the
-APIs and gateway. `realm-setup` reconciles managed profile policy, callback URLs,
-SMTP and document references; it preserves user records/credentials. Keycloak's
-startup realm import initializes a missing realm, rather than updating an existing
-realm on every restart. Changing a secret file alone does not rotate an existing
-client's stored credential: coordinate credential rotation explicitly.
-
-After startup, verify the public issuer, OTP delivery to the first operator,
-passkey enrollment, Account/Admin SSO, role publishing/application, recovery and
-private-route boundaries through the actual HTTPS proxy. Verify backup/restore
-before accepting the deployment as operational. A container marked healthy is not
-proof of SMTP deliverability or of the external proxy configuration.
+Pin the source release and back up persistent state before upgrades. First startup
+requires the existing SPHERE network. Verify actual HTTPS, Brevo, GitHub permissions,
+external SSO and backup/restore on the target host before admitting real traffic.
 
 ## HTTPS reverse proxy and public URLs
 
@@ -598,3 +517,196 @@ Table panel actions align to the title/description block; searches fill availabl
 space between their leading search icon and trailing refresh action. Event-type
 filters move below the search on small screens, and permission totals appear in
 the pagination rather than reducing the search field width.
+
+## Google and Universidad de Sevilla sign-in
+
+Both are upstream identity providers of Keycloak. Applications still consume the
+SCORETech Identity OIDC issuer; neither provider grants application/Admin permissions.
+External sign-in retains explicit legal consent, safe baseline roles, and mandatory
+administrative passkeys. A successful upstream login does not require another
+mailbox challenge. The native VERIFY_EMAIL action is skipped only for that
+server-attested, user-bound broker transaction; local flows and explicitly
+requested verification retain their native behavior. CAS email remains unverified
+unless mailbox ownership is proved separately. Existing-account linking requires
+confirmation and mailbox verification; matching email is never silently trusted.
+US identity keys are UVUS identifiers, not email addresses.
+
+Configuration is optional and private: copy `config/external-sso.example.json` to
+`.lab/external-sso.json` for the lab, or `.identity-runtime/external-sso.json` for
+production. Keep the file readable by the rendering process only (production UID
+1000, mode 0600). It contains the Google secret and must never enter Git, web config,
+logs or screenshots. Missing configuration leaves both providers disabled. Set
+`google.enabled` to true only after supplying its real client ID and secret. The
+current workstation's `.lab/external-sso.json` already contains SPHERE's Google
+client ID, an empty secret, and its US CAS configuration. Google is disabled until
+the operator fills `google.clientSecret` and enables it. Run `./lab up` afterwards.
+For production, rerender then run the documented realm reconciliation step; realm
+import alone does not update an existing realm. Owned broker configuration is
+reconciled without deleting accounts, credentials or linked identities. Removing
+an owned provider from configuration disables it, preserving existing links.
+
+### Google local testing
+
+Google uses Keycloak's native Google broker. Reuse SPHERE's client ID/secret, but
+add this authorized redirect URI to that Google Cloud OAuth client for local tests:
+
+```
+http://localhost:18000/identity/auth/realms/score/broker/google/endpoint
+```
+
+For the initial public deployment register:
+
+```
+https://sphere.score.us.es/identity/auth/realms/score/broker/google/endpoint
+```
+
+The SPHERE Google callback is not interchangeable with the native Keycloak
+callback. Google must explicitly allow the appropriate URI. No public deployment
+is required for Google once its localhost callback and consent/test-user settings
+permit the account. Real Google sign-in is not verified without that secret.
+
+### US CAS compatibility callback and gateway
+
+The CAS broker defaults to `https://sso.us.es/CAS` and accepts the already approved
+SPHERE callback from `us.callbackUrl`:
+
+```
+https://sphere.score.us.es/api/v1/users/auth/sso/us/callback
+```
+
+The inner Identity gateway includes that exact compatibility route, redirecting the browser to
+`/identity/auth/realms/score/broker/us-sso/endpoint` with query parameters preserved.
+This extra same-origin redirect is intentional: the browser only sends the native
+authentication cookie on the realm path, not on SPHERE's `/api/` path.
+CAS ticket validation uses the identical externally visible service URL, including
+the transaction state. State starts with `sti.` and is then validated against the
+native Keycloak authentication session; the prefix itself grants no authority.
+Tickets, XML attributes and states must not be logged.
+
+At the outer SPHERE gateway, when SPHERE no longer starts direct CAS sign-ins,
+route only this callback to the loopback Identity gateway (default production port
+18010). Keep the `/identity/` route as documented. Example inside its server block:
+
+```nginx
+location = /api/v1/users/auth/sso/us/callback {
+    proxy_pass http://127.0.0.1:18010;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+}
+```
+
+If that proxy runs in Docker, use a reachable gateway service address instead of
+its own container's loopback. While SPHERE still starts direct CAS logins, dispatch
+only `state` values beginning with `sti.` to Identity and leave others on SPHERE.
+Do not steal callbacks of in-progress SPHERE logins. No outer SPHERE proxy has
+been changed automatically by implementing this integration.
+
+Real US sign-in cannot complete against an ordinary localhost-only lab while its
+approved callback points to the public SPHERE host. Deploy Identity behind that
+host/gateway, or arrange a controlled HTTPS test environment serving the complete
+public Identity origin and callback consistently. Tunneling only the callback to
+localhost is insufficient because broker cookies and public issuer URLs must
+also agree. Do not change the live gateway just to run the local regression suite.
+The Java suite uses a local CAS fixture to exercise validation, malformed XML,
+transaction state and replay rejection without contacting the US. A future SAML
+migration must explicitly preserve each UVUS-to-account link.
+
+If upgrading an existing production realm created before external SSO support,
+the native operations administrator must first grant `realm-management` →
+`manage-identity-providers` to the **identity-config-sync service account**. Fresh
+production imports include it. Do not grant that capability to browser clients.
+The existing `manage-realm` capability remains required for flow reconciliation.
+
+### Managing linked sign-in identities
+
+Account → Security → Connected identities lists Google and Universidad de Sevilla
+with connection state and the provider's linked username. Connect uses the native
+`idp_link:<alias>` action; the provider proves possession and Keycloak rejects an
+identity owned by another account. Linking does not merge existing accounts or
+change service permissions. The callback returns to `#security/identities`.
+
+Disconnect uses `score-unlink-identity:<alias>`, requires fresh authentication and
+a native confirmation page, and rechecks remaining methods under the shared
+credential-mutation lock. Only verified email OTP, a local passkey/authenticator whose complete local login
+flow is usable, or another enabled sign-in provider counts as fallback. When realm
+email verification is required, an unverified mailbox does not become a usable
+local fallback merely by adding a passkey or authenticator. The view offers explicit
+email verification when needed. Disabled/link-only
+providers and unverified CAS email do not count. Administrative passkey rules
+remain in force. The Account API only forwards the caller's signed bearer to the
+private native metadata endpoint; provider tokens/secrets are never returned.
+
+Realm reconciliation enables the two actions and grants the narrowly scoped native
+`account.manage-account-links` role through the realm default role and Account Web
+client scope. The native Account console stays disabled and its REST path is blocked by the
+public gateway, so native unlink endpoints cannot bypass the last-method guard.
+No `manage-account` or
+administrative browser privilege is granted. Rerender and reconcile after upgrading
+an existing realm. Native operators must ensure users retain the realm default
+role; deliberately stripped accounts do not gain linking authority automatically.
+
+## Browser session renewal and cross-console SSO
+
+Access tokens expire after five minutes; this is distinct from the native SSO
+session. The checked-in realm allows 12 hours of SSO inactivity and a seven-day
+absolute session maximum; Remember me uses 30 days idle and 90 days maximum.
+A suspended browser may stop running renewal timers. Account and Admin therefore
+recheck expiry on focus, visibility restoration and page restoration, sharing one
+refresh exchange with API requests and timer-driven renewal.
+
+Opening either console without a local token first checks the native same-origin
+SSO cookie through OIDC `prompt=none` and its dedicated `auth/silent-callback`.
+A rejected console refresh can also recover through that still-valid SSO session
+without navigating away or dropping view state. Recovery is bound to the previous
+subject; it does not silently replace the user with a different account. Transient
+network errors retain the current view and retry. A genuinely ended/revoked native
+session, an account change, missing consent or a required administrative passkey
+can still require interactive sign-in; renewal never bypasses those checks.
+
+Valid broker-origin SSO cookies retain their server-owned, user-bound origin note
+when reused across consoles. A fresh local authentication clears that broker
+exemption, preserving native mailbox verification where applicable. The two web
+clients' silent callback URIs are managed by realm rendering/reconciliation; the
+Google and US upstream callback URLs are unchanged. Rerender and reconcile when
+upgrading existing deployments. `pnpm test:e2e:session` exercises cross-console
+SSO, background resume, rejected-refresh recovery, retained route/search state
+and the normal anonymous sign-in fallback with real Keycloak.
+
+### Shared profile and avatar
+
+Account separates contact details (`#profile`) from the optional shared profile
+(`#public-profile`). The latter includes display name, bio (200 characters), city,
+country, date of birth and LinkedIn/Instagram/Facebook/X profile links. These are
+stored as allowlisted `scoreProfile` and `scoreSocialLinks` user attributes through
+the provider's existing atomic field patch. Updating either group leaves contact
+data, roles, consent, credentials and the other group intact. Supplying an empty
+group clears its optional values. Profile data is only returned to its owner;
+this feature does not create a public directory or add optional personal data to
+tokens. Each future service integration must define the data it consumes and its
+public visibility. SPHERE/SPACE data has not been migrated.
+
+The avatar editor reuses SPHERE's SVG artwork, initials, paginated artwork picker,
+foreground/background palettes and `react-easy-crop` workflow. The palette defaults
+to SCORETech crimson. Predefined IDs and six-digit hex colors are allowlisted;
+existing named colors and earlier avatar descriptors remain readable.
+
+Both Compose deployments mount the persistent `identity-avatars` volume in Account
+API and configure `APP_AVATAR_DIRECTORY=/var/lib/identity-avatars`. Include this
+volume in backups alongside the database. `./lab down` preserves it. Uploaded
+JPEG/PNG/WebP images are limited to 2 MiB and 16 million decoded pixels, stripped
+of metadata and normalized server-side to 256×256 WebP. Files are private; the
+owner's no-store profile response embeds the image rather than exposing a public
+file URL. Replacing a photo removes its previous owned file after the profile
+write succeeds. `APP_AVATAR_BUCKET` selects the existing S3 adapter instead when
+set; explicit bucket lifecycle rules should clean abandoned uploads.
+
+Account's Danger zone starts `score-delete-account`, a native action restricted
+to Account Web, with immediate reauthentication, a CSRF-bound confirmation form
+and typed email confirmation. It removes the central identity through Keycloak's
+UserManager, including linked identities, roles and native sessions. Administrative
+accounts (including delegated administrative access) must have that access removed
+first by another administrator; the native action rechecks this policy. The UI
+explains that service data, subscriptions and organization ownership must be
+managed in the respective services first. No SPHERE/SPACE deletion is triggered.
+A deleted identity's unreferenced avatar file should be removed during storage
+retention cleanup; it is no longer retrievable through the Account API.

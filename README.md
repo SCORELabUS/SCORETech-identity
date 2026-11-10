@@ -14,7 +14,14 @@ permission declarations, managed OpenID Connect applications and application
 access rules. Applications generate their own client IDs, show backend secrets
 at creation/rotation or through an explicit administrator reveal in connection details, and combine callback settings with required permissions. The sidebar avatar opens
 profile and sign-out actions; Security groups credentials by sign-in method, and
-Preferences includes light/dark previews.
+Preferences includes light/dark previews. Account also supports a shared profile
+(display name, bio, city/country and optional date of birth), social profile links,
+and SPHERE's avatar picker with initials, artwork, colors and cropped photo uploads.
+Photos persist in the private `identity-avatars` volume in both Compose deployments.
+The Danger zone offers native, freshly authenticated identity deletion with typed
+confirmation and protected administrative accounts; service data remains managed
+in the respective services. Run `pnpm test:e2e:profile` against the local lab to
+exercise these flows with an isolated, disposable identity.
 Administrators, including delegated support operators, must enroll and use a
 passkey. Public registration does not grant access to protected services.
 
@@ -105,19 +112,28 @@ removes its named test accounts afterward. Screenshots/results are written to
 check on a real device. [Verification record](docs/VERIFICATION.md) describes the
 completed local checks and their limits. CI repeats the lab and browser workflow.
 
+## External sign-in
+
+Google and Universidad de Sevilla CAS are supported through Keycloak identity
+brokering. Configure `.lab/external-sso.json` using
+`config/external-sso.example.json`, then run `./lab up`. Google needs its client
+secret and an authorized Keycloak callback; the US keeps SPHERE's approved public
+callback through the gateway. See [setup and local testing](docs/OPERATIONS.md#google-and-universidad-de-sevilla-sign-in)
+for the exact callback URLs and deployment requirements. A missing configuration
+leaves external providers disabled. Run `pnpm test:e2e:sso` against the lab for the
+isolated CAS fixture flow; it does not contact the US or Google.
+
 ## Deploy and integrate
 
-The prepared production configuration targets
-`https://sphere.score.us.es/identity`. The public origin is configurable through
-`.env.production`; changing the hostname requires coordinated OIDC configuration
-and a WebAuthn migration review. Production has **not** been deployed or tested
-against live Brevo SMTP by preparing these files.
+Docker entry points are available in `docker/development`, `docker/staging` and
+`docker/production`. Development starts with `docker compose up -d --build`;
+production/staging first need their private `.env`, GitHub App key and existing
+SPHERE network configured. See [Docker deployment](docker/README.md) for exact
+commands, gateway activation, callbacks, state preservation and rollback.
 
-[Operations and integration](docs/OPERATIONS.md) documents the exact production
-setup order, secret files, GitHub catalogue publishing, Brevo SMTP, backup/restore
-and OIDC onboarding. Run one Admin API process until the administrative mutation
-coordination is replaced with a distributed mechanism. The first release does
-not migrate users or replace authentication in SPHERE or SPACE.
+The initial production origin is `https://sphere.score.us.es`, served under
+`/identity` by SPHERE's HTTPS gateway. Hosting and broker settings remain
+configurable; changing WebAuthn RP/issuer requires a migration review.
 
 ## Repository and provenance
 
@@ -125,10 +141,8 @@ not migrate users or replace authentication in SPHERE or SPACE.
 - `apps/`: Account and Admin web/API applications.
 - `packages/identity-internal/`: shared server-side identity adapters.
 - `tooling/`, `config/`, `deploy/`: rendering, catalogue synchronization and containers.
-- [Implementation plan](docs/PLAN_IMPLEMENTACION.md) and
-  [extraction inventory](docs/INVENTARIO_TENTU.md): original design/reference documents.
-- [Upstream provenance](docs/UPSTREAM.json), [third-party notices](THIRD_PARTY_NOTICES.md)
-  and [license](LICENSE): extraction history and retained licenses.
+- [Third-party notices](THIRD_PARTY_NOTICES.md) and [license](LICENSE): upstream
+  attribution and retained licenses.
 
 Native identity contracts, Java package names and technical identifiers such as
 `tentu-*`, `tentu.*` and the protected `administrador` role are deliberately retained

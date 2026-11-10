@@ -4,8 +4,8 @@
 
 This repository implements centralized identity for the SCORE ecosystem using
 Keycloak, Account Web/API and Admin Web/API. Start with `README.md`; use
-`docs/OPERATIONS.md` for deployment and integration details and
-`docs/VERIFICATION.md` for completed checks and their limits.
+`docs/OPERATIONS.md` for integration/maintenance and `docker/README.md` for
+environment setup, deployment and its verification limits.
 
 - The user-facing brand is **SCORETech Identity**, with this exact capitalization.
 - All user-facing screens and transactional emails use English.
@@ -33,11 +33,11 @@ Keycloak, Account Web/API and Admin Web/API. Start with `README.md`; use
 - `packages/ui/`: shared UI, authentication/session handling and styles.
 - `config/realm-template.json`: source realm configuration.
 - `tooling/`: configuration rendering, realm bootstrap, catalogue fixture and sync.
-- `deploy/local/`, `deploy/production/`: Compose and gateway configuration.
+- `docker/development/`, `docker/staging/`, `docker/production/`: canonical Compose entry points; see `docker/README.md`.
+- `deploy/local/`, `deploy/production/`: shared Compose and gateway definitions included by those entry points.
 - `tests/unit/`: tooling/configuration/coordination tests.
 - `tests/e2e/`: real laboratory browser and OAuth flows.
-- `docs/UPSTREAM.json`, `THIRD_PARTY_NOTICES.md`, and retained licenses document
-  upstream provenance. Preserve attribution when adapting extracted code.
+- `THIRD_PARTY_NOTICES.md` and retained licenses document upstream provenance. Preserve attribution when adapting extracted code.
 
 ## Commands and verification
 
@@ -131,7 +131,7 @@ profile and red Sign out; Account shows Administration only for the live Admin r
 
 ## Secrets, deployment and state preservation
 
-Never commit `.lab/`, `.identity-runtime/`, `.env` files with credentials, database
+Never commit `.lab/`, `.identity-runtime/`, `.identity-staging-runtime/`, `secrets/`, `.env` files with credentials, database
 volumes, generated builds, browser artifacts, private keys or generated secrets.
 Only sanitized example env files belong in Git. Do not delete volumes or reset
 the existing lab as a routine verification step.
@@ -139,8 +139,56 @@ the existing lab as a routine verification step.
 Production configuration initially targets `https://sphere.score.us.es/identity`.
 Keep the origin configurable through the renderer and documented environment
 variables; changing hosts also needs issuer/client configuration and WebAuthn
-migration review. Production SMTP uses Brevo via mounted secret files; the local
+migration review. Production SMTP uses Brevo via Compose secrets sourced from the private deployment `.env`; the local
 lab uses Mailpit. Follow the setup order and secret ownership rules in
 `docs/OPERATIONS.md`. Keep native administration private and do not expose database
 or provider ports as a shortcut. Report actual verification separately from
 unperformed live Brevo, GitHub installation, production or migration checks.
+
+## External identity providers
+
+Google uses Keycloak's native broker; US login uses the `score-us-cas` SPI in the
+existing provider JAR. `tooling/external-sso.mjs` renders and reconciles the owned
+broker configuration and flow aliases. Private config is
+`.lab/external-sso.json` locally or `.identity-runtime/external-sso.json` in
+production; copy the sanitized `config/external-sso.example.json` when needed.
+Never print Google secrets. Google stays disabled until its secret is configured.
+
+Keep first-broker account creation/linking alternatives inside a REQUIRED subflow;
+Keycloak ignores alternatives alongside REQUIRED executions. Post-broker policy
+must preserve local email verification, legal consent, safe registration roles and native
+administrative passkeys. Do not trust US email or silently merge accounts by mail.
+The legacy SPHERE CAS callback must redirect into the native realm cookie path;
+internal proxy rewriting alone loses the path-scoped authentication cookie.
+`pnpm test:e2e:sso` uses a local CAS fixture and temporarily replaces only the lab's
+US broker configuration, restoring it afterwards. Do not run it alongside other
+stateful E2E flows. Actual US login needs the approved public callback routed to
+Identity; actual Google login needs a valid secret and registered callback URI.
+
+Successful external sign-in skips redundant VERIFY_EMAIL through the user-bound
+server auth note and BrokerAwareVerifyEmail, including pending actions left by old
+broker versions. Never disable realm-wide email verification or falsely mark CAS
+mailboxes verified. Explicit verification and existing-account linking remain native.
+
+Account's Connected identities view lives under `#security/identities` and uses
+native `idp_link:<alias>` / `score-unlink-identity:<alias>` actions. The metadata
+API forwards only the user's bearer to private `score-identities`; never expose
+federated tokens. Realm reconciliation defines native account role prerequisites
+but grants/scopes only `manage-account-links`. Keep the native Account REST path
+blocked at the gateway so it cannot bypass last-method checks. Fallback methods
+must satisfy the entire local email policy, not just have a stored credential.
+
+Browser initialization probes same-origin SSO via `auth/silent-callback` before
+showing sign-in. Preserve focus/visibility/pageshow expiry checks, single-flight
+renewal and same-subject recovery after a rejected local refresh. Native session
+expiry/revocation and required factors remain authoritative; do not extend access
+token lifetimes to hide renewal bugs. `pnpm test:e2e:session` verifies these flows.
+
+Shared profile data lives in `scoreProfile` / `scoreSocialLinks`; only these
+allowlisted groups may be patched and they are not automatically public or token
+claims. Avatar editing reuses SPHERE's artwork/crop workflow. Compose photo storage
+is the private persistent `identity-avatars` volume, with server-side image decoding
+and normalization. Preserve named-color/legacy-avatar compatibility. Native
+`score-delete-account` requires fresh authentication, exact email confirmation,
+Account Web client binding and protected-admin checks; never expose an unrestricted
+self-delete API or claim that deleting the identity erases service-owned data.
