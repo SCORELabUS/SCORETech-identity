@@ -15,6 +15,7 @@ import org.keycloak.services.resource.*;
 public final class UserMutationResourceFactory implements RealmResourceProviderFactory {
   private static final Set<String> PROFILE_ATTRIBUTES = Set.of("scoreProfile", "scoreSocialLinks", "tentuMarketing", "tentuPreferences", "tentuAvatar", "tentuPhone", "tentuTaxDocumentType", "tentuTaxDocumentNumber", "tentuUpdatedAt", "tentuPasskeySuggestionSeen");
   private static final Set<String> ADMIN_ATTRIBUTES = Set.of("tentuWooCustomerId", "tentuWooStoreId", "tentuInvitationState");
+  private static final Set<String> IMPORTABLE_ATTRIBUTES = Set.of("scoreProfile", "scoreSocialLinks", "tentuAvatar", "tentuPhone");
   public String getId() { return "tentu-user-mutations"; }
   public RealmResourceProvider create(KeycloakSession session) { return new RealmResourceProvider() {
     public Object getResource() { return new Resource(session); }
@@ -61,6 +62,14 @@ public final class UserMutationResourceFactory implements RealmResourceProviderF
     }
   }
   static void validate(KeycloakSession session, Map<String, Object> body, boolean admin) {
+    if (body != null && body.containsKey("attributeDefaults")) {
+      if (body.size() != 1 || !(body.get("attributeDefaults") instanceof Map<?, ?> defaults)
+          || defaults.isEmpty() || !IMPORTABLE_ATTRIBUTES.containsAll(defaults.keySet())
+          || defaults.values().stream().anyMatch(value -> !(value instanceof List<?> values) || values.size() != 1))
+        throw new BadRequestException("Invalid profile defaults.");
+      validate(session, Map.of("attributes", defaults), admin);
+      return;
+    }
     var fields = admin ? Set.of("firstName", "lastName", "email", "emailVerified", "enabled", "attributes") : Set.of("firstName", "lastName", "attributes");
     if (body == null || body.isEmpty() || !fields.containsAll(body.keySet())) throw new BadRequestException("Campos no permitidos.");
     for (String name : List.of("firstName", "lastName")) if (body.containsKey(name)
@@ -81,6 +90,13 @@ public final class UserMutationResourceFactory implements RealmResourceProviderF
   }
   @SuppressWarnings("unchecked")
   static void apply(UserModel user, Map<String, Object> body) {
+    if (body.get("attributeDefaults") instanceof Map<?, ?> defaults) {
+      for (var entry : defaults.entrySet()) {
+        String name = (String) entry.getKey();
+        if (user.getFirstAttribute(name) == null) user.setAttribute(name, (List<String>) entry.getValue());
+      }
+      return;
+    }
     if (body.containsKey("firstName")) user.setFirstName(((String) body.get("firstName")).trim());
     if (body.containsKey("lastName")) user.setLastName(((String) body.get("lastName")).trim());
     if (body.containsKey("enabled")) user.setEnabled((Boolean) body.get("enabled"));

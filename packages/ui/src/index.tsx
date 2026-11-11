@@ -11,6 +11,7 @@ import {
   type FormEvent,
 } from "react";
 import {
+  ArrowLeft,
   ArrowUpRight,
   Fingerprint,
   LogOut,
@@ -25,7 +26,7 @@ import {
 import { Avatar, type AvatarValue } from "./avatar";
 export { Avatar, avatarPalette, avatarChoices, avatarColor } from "./avatar";
 export type { AvatarValue } from "./avatar";
-import { config, useAuth } from "./auth";
+import { accountReturnUrl, config, useAuth } from "./auth";
 export { config, useAuth, useResource, AuthProvider } from "./auth";
 export type { IdentityConfig } from "./auth";
 export function Button({
@@ -349,6 +350,9 @@ export function Shell({
   children: ReactNode;
 }) {
   const { user, signOut, api } = useAuth();
+  const returnTo = accountReturnUrl();
+  const accountUrl = new URL(config.accountUrl);
+  if (returnTo) accountUrl.searchParams.set("return_to", returnTo);
   const [menu, setMenu] = useState(false);
   const accountMenu = useRef<HTMLDetailsElement>(null);
   const [error, setError] = useState("");
@@ -438,7 +442,7 @@ export function Shell({
         className={`sidebar ${menu ? "sidebar-open" : ""}`}
       >
         <a
-          href={config.kind === "admin" ? config.adminUrl : config.accountUrl}
+          href={config.kind === "admin" ? config.adminUrl : accountUrl.href}
           className="cursor-pointer wordmark"
         >
           SCORETech<span>Identity</span>
@@ -467,6 +471,11 @@ export function Shell({
           ))}
         </nav>
         <div className="sidebar-bottom">
+          {returnTo && (
+            <a className="cursor-pointer ecosystem-link" href={returnTo}>
+              <ArrowLeft size={16} aria-hidden="true" /> Back to application
+            </a>
+          )}
           {config.kind === "account" && showAdministration ? (
             <a className="cursor-pointer ecosystem-link" href={config.adminUrl}>
               Administration <ArrowUpRight size={16} />
@@ -510,7 +519,7 @@ export function Shell({
             >
               <a
                 className="cursor-pointer"
-                href={config.accountUrl + "#public-profile"}
+                href={accountUrl.href + "#public-profile"}
               >
                 <UserRound size={17} /> My profile
               </a>

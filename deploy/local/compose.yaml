@@ -15,6 +15,7 @@ services:
     environment:
       IDENTITY_RUNTIME_DIR: /runtime
       IDENTITY_PUBLIC_ORIGIN: http://localhost:${IDENTITY_LAB_PORT:-18000}
+      IDENTITY_ACCOUNT_RETURN_ORIGINS: ${IDENTITY_ACCOUNT_RETURN_ORIGINS:-}
     volumes: [./.lab:/runtime]
   database:
     image: postgres:18-alpine

@@ -23,6 +23,15 @@ export function configuration(env = process.env) {
     throw new Error("Invalid identity environment.");
   if (environment !== "local" && origin.protocol !== "https:")
     throw new Error("Deployed identity requires HTTPS.");
+  const accountReturnOrigins = (env.IDENTITY_ACCOUNT_RETURN_ORIGINS ?? "")
+    .split(",").map((value) => value.trim()).filter(Boolean).map((value) => {
+      const url = new URL(value);
+      const local = environment === "local" && url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+      if (url.origin !== value || (url.protocol !== "https:" && !local))
+        throw new Error("IDENTITY_ACCOUNT_RETURN_ORIGINS requires exact trusted origins.");
+      return url.origin;
+    });
   const root = origin.origin + basePath;
   return {
     origin: origin.origin,
@@ -33,6 +42,7 @@ export function configuration(env = process.env) {
     providerPath: basePath + "/auth",
     issuer: root + "/auth/realms/" + realm,
     accountUrl: root + "/account/",
+    accountReturnOrigins,
     adminUrl: root + "/admin/",
     rpId: env.IDENTITY_WEBAUTHN_RP_ID || origin.hostname,
   };
