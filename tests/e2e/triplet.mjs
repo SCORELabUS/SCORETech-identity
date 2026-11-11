@@ -234,6 +234,119 @@ async function applied(revision) {
     .toBe(revision);
 }
 
+async function verifyRegistrationDefault() {
+  const request = (suffix = "", body) =>
+    admin.evaluate(
+      async ({ suffix, body }) => {
+        const c = window.__SCORE_CONFIG__;
+        const user = JSON.parse(
+          sessionStorage.getItem(`score.user.user:${c.issuer}:${c.clientId}`),
+        );
+        const response = await fetch(c.adminApiUrl + "/catalogue" + suffix, {
+          headers: {
+            Authorization: "Bearer " + user.access_token,
+            "Content-Type": "application/json",
+          },
+          ...(body ? { method: "POST", body: JSON.stringify(body) } : {}),
+        });
+        return { status: response.status, data: await response.json() };
+      },
+      { suffix, body },
+    );
+  const initial = await request();
+  assert.equal(initial.status, 200);
+  const original = initial.data.catalogue;
+  const permission = `e2e-default-${run}:access`;
+  const alternate = "e2e-default-" + run;
+  const publish = async (catalogue) => {
+    const current = await request();
+    const result = await request("/revisions", {
+      baseSha: current.data.baseSha,
+      catalogue,
+      reason: "Verify registration default role behavior.",
+      environments: [current.data.environment],
+    });
+    assert.equal(result.status, 201, JSON.stringify(result.data));
+  };
+  await publish({
+    ...original,
+    permissions: [
+      ...original.permissions,
+      { name: permission, description: "Fixture access" },
+    ],
+    roles: [
+      ...original.roles,
+      {
+        name: alternate,
+        description: "Fixture default",
+        permissions: [permission],
+      },
+    ],
+  });
+  try {
+    await admin.reload();
+    await admin
+      .getByLabel("Search roles", { exact: true })
+      .fill(original.defaultRole);
+    const row = admin
+      .getByRole("row")
+      .filter({ has: admin.getByText(original.defaultRole, { exact: true }) });
+    await row.getByRole("button", { name: "Edit role", exact: true }).click();
+    const editor = admin.getByRole("dialog", {
+      name: "Edit role",
+      exact: true,
+    });
+    await expect(
+      editor.getByLabel("identity:users:view", { exact: false }),
+    ).toHaveCount(0);
+    await editor.getByLabel(permission, { exact: false }).check();
+    await editor
+      .getByRole("button", { name: "Review changes", exact: true })
+      .click();
+    await editor
+      .getByLabel("Reason for this change")
+      .fill("Verify default application entry.");
+    await editor
+      .getByRole("button", { name: "Publish changes", exact: true })
+      .click();
+    await editor.waitFor({ state: "hidden" });
+    const edited = await request();
+    assert(
+      edited.data.catalogue.roles
+        .find(({ name }) => name === original.defaultRole)
+        .permissions.includes(permission),
+    );
+
+    await admin
+      .getByRole("button", { name: "Change default role", exact: true })
+      .click();
+    const dialog = admin.getByRole("dialog", {
+      name: "Change default role",
+      exact: true,
+    });
+    await expect(dialog.locator('option[value="administrador"]')).toHaveCount(
+      0,
+    );
+    await dialog
+      .getByLabel("Default role", { exact: true })
+      .selectOption(alternate);
+    await dialog
+      .getByLabel("Reason for this change")
+      .fill("Verify default selection persistence.");
+    await dialog
+      .getByRole("button", { name: "Save default role", exact: true })
+      .click();
+    await dialog.waitFor({ state: "hidden" });
+    assert.equal((await request()).data.catalogue.defaultRole, alternate);
+    mark(
+      "Admin saved default application access and selected a different eligible registration role.",
+    );
+  } finally {
+    await publish(original);
+    await admin.reload();
+  }
+}
+
 try {
   fixture("create", adminEmail);
   admin = await attach(adminContext);
@@ -306,6 +419,7 @@ try {
     path: artifacts + "/role-catalogue.png",
     fullPage: true,
   });
+  await verifyRegistrationDefault();
   await signIn(member, "account", memberEmail);
   await member.locator("#firstName").waitFor();
   await captureAuth(member, "auth-registration", true);

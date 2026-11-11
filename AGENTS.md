@@ -10,8 +10,10 @@ environment setup, deployment and its verification limits.
 - The user-facing brand is **SCORETech Identity**, with this exact capitalization.
 - All user-facing screens and transactional emails use English.
 - The default realm is `score`; the default public path is `/identity`.
-- Public registration verifies email and grants personal Account access, not
-  automatic access to protected applications.
+- Public registration verifies email and grants personal Account access. The
+  selected default role can grant explicit application entry permissions.
+  Only the protected Admin can change the selection or its grants. Changing
+  the default does not rewrite existing role assignments.
 - Preserve passwordless email codes, passkeys and TOTP. Administrative access
   requires a passkey; do not bypass this requirement to simplify testing.
 - The protected administrator role has technical ID `administrador` and display

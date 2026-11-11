@@ -173,9 +173,10 @@ export async function verifyApplications({
       .selectOption(kind);
     await dialog.getByLabel("Application origin", { exact: true }).fill(origin);
     await dialog.getByLabel("Redirect URLs", { exact: true }).fill(callback);
-    await dialog
-      .getByLabel("Post-logout URLs", { exact: true })
-      .fill(origin + "/identity/account/");
+    if (kind === "public")
+      await dialog
+        .getByLabel("Post-logout URLs", { exact: true })
+        .fill(origin + "/identity/account/");
     await dialog
       .getByLabel("Filter application permissions", { exact: true })
       .fill(permission);
@@ -195,6 +196,10 @@ export async function verifyApplications({
     );
     const result = await response.json();
     assert.equal(result.application.name, name);
+    assert.deepEqual(
+      result.application.postLogoutRedirectUris,
+      kind === "public" ? [origin + "/identity/account/"] : [],
+    );
     assert.match(result.application.clientId, /^score-app-[a-f0-9-]{36}$/);
     owned.push({ clientId: result.application.clientId, name });
     await dialog.waitFor({ state: "hidden" });

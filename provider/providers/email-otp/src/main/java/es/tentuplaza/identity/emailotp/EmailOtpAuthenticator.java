@@ -133,7 +133,8 @@ public final class EmailOtpAuthenticator implements Authenticator {
     if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$") || !RegistrationPolicy.validName(context.getSession(), firstName, true) || !RegistrationPolicy.validName(context.getSession(), lastName, true)) { challengeRegistration(context, email, "emailOtpInvalidDetails"); return; }
     if (!"true".equals(form.getFirst("terms")) || !"true".equals(form.getFirst("privacy"))) { challengeRegistration(context, email, "emailOtpConsentRequired"); return; }
     UserModel user = context.getUser();
-    if (user == null) {
+    boolean created = user == null;
+    if (created) {
       String lock = "tentu-registration-create:" + EmailOtpRateLimit.recipientKey(context, email);
       if (!context.getSession().singleUseObjects().putIfAbsent(lock, 30)) {
         challengeRegistration(context, email, "emailOtpRegistrationConflict"); return;
@@ -167,14 +168,19 @@ public final class EmailOtpAuthenticator implements Authenticator {
     if (!user.isEnabled() || context.getProtector().isTemporarilyDisabled(context.getSession(), context.getRealm(), user)) {
       challengeDetails(context, "emailOtpInvalidCode"); return;
     }
-    try { if(context.getAuthenticationSession().getAuthNote(InvitationStore.NOTE)!=null) new InvitationStore(context.getSession()).redeem(context.getAuthenticationSession(), user); }
+    try {
+      if (context.getAuthenticationSession().getAuthNote(InvitationStore.NOTE) != null)
+        new InvitationStore(context.getSession()).redeem(context.getAuthenticationSession(), user);
+      else if (created) {
+        var role = RegistrationPolicy.publicDefaultRole(context.getRealm());
+        if (role != null) user.grantRole(role);
+      }
+    }
     catch (jakarta.ws.rs.ClientErrorException error) {
       context.getSession().getTransactionManager().setRollbackOnly();
       context.failureChallenge(org.keycloak.authentication.AuthenticationFlowError.INVALID_USER,
         context.form().setError("tentuInvitationUnavailable").createErrorPage(Response.Status.CONFLICT)); return;
     }
-    // Public registration never grants application access. Invitations redeem
-    // their explicitly authorized roles above; other access is assigned by Admin.
     user.removeAttribute(InvitationStore.PROVISIONAL);
     user.removeAttribute("tentu.registration.invitation");
     user.setSingleAttribute("tentuRegistrationCompletedAt", Instant.now().toString());

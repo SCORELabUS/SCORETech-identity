@@ -150,6 +150,22 @@ class EmailOtpAuthenticatorTest {
     f.form.putSingle("terms", "true"); f.form.putSingle("privacy", "true"); f.action("register");
     verify(f.context).success(); verify(f.user, never()).grantRole(any());
   }
+  @Test void verifiedEmailRegistrationReceivesTheSelectedDefaultRole() throws Exception {
+    var f = new Fixture(); when(f.context.getUser()).thenReturn(null);
+    when(f.context.getSession().users().getUserByEmail(any(), anyString())).thenReturn(null);
+    when(f.context.getSession().users().addUser(eq(f.context.getRealm()), startsWith("score-"))).thenReturn(f.user);
+    var role = mock(RoleModel.class);
+    when(f.context.getRealm().getRole("public-user")).thenReturn(role);
+    when(f.context.getRealm().getAttribute(RegistrationPolicy.DEFAULT_ROLE)).thenReturn("member");
+    when(f.context.getRealm().getAttribute(AuthorizationResourceFactory.ACTIVE)).thenReturn(
+        "{\"defaultRole\":\"public-user\",\"roles\":[{\"name\":\"public-user\"}]}");
+    f.form.putSingle("email", "new@example.invalid"); f.action("identify"); f.code(f.code);
+    f.form.putSingle("firstName", "Test"); f.form.putSingle("lastName", "Person");
+    f.form.putSingle("terms", "true"); f.form.putSingle("privacy", "true");
+    f.action("register");
+    verify(f.user).grantRole(role);
+    verify(f.context).success();
+  }
   @Test void invalidLegacyDefaultCannotBlockPublicRegistrationOrGrantAccess() throws Exception {
     var f = new Fixture(); when(f.context.getUser()).thenReturn(null);
     when(f.context.getSession().users().getUserByEmail(any(), anyString())).thenReturn(null);

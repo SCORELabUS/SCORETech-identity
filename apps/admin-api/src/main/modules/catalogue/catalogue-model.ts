@@ -175,6 +175,14 @@ export function isProtectedPermission(name: string): boolean {
   );
 }
 
+export function isDefaultApplicationAccess(name: string): boolean {
+  return (
+    /^[a-z][a-z0-9-]*:access$/.test(name) &&
+    name !== 'account-web:access' &&
+    !isProtectedPermission(name)
+  );
+}
+
 export function validateCatalogue(input: unknown, _previous?: Catalogue): Catalogue {
   const catalogue = CatalogueSchema.parse(input);
   catalogue.accessRules ??= structuredClone(_previous?.accessRules ?? []);
@@ -285,7 +293,7 @@ export function validateCatalogue(input: unknown, _previous?: Catalogue): Catalo
     visited.add(name);
   };
   for (const name of roles.keys()) visit(name);
-  assertUnprivilegedDefaultRole(catalogue, PublicRegistrationRole);
+  assertUnprivilegedDefaultRole(catalogue, catalogue.defaultRole);
   const administratorPermissions = new Set<string>();
   const collectAdministratorPermissions = (name: string) => {
     for (const permission of roles.get(name)?.permissions ?? []) {
@@ -338,17 +346,12 @@ function validateAccessRules(rules: AccessRule[], permissions: ReadonlySet<strin
 }
 
 function registrationDefaultRole(catalogue: Catalogue, selected: string | undefined): string {
-  if (selected === ProtectedCatalogueRole)
+  const name = selected ?? PublicRegistrationRole;
+  if (name === ProtectedCatalogueRole)
     throw new HttpError(
       422,
       'protected_default_role',
       'The administrator role cannot be the registration default.',
-    );
-  if (selected && selected !== PublicRegistrationRole)
-    throw new HttpError(
-      422,
-      'immutable_default_role',
-      'The registration default role must remain member.',
     );
   if (!catalogue.roles.some((role) => role.name === PublicRegistrationRole))
     throw new HttpError(
@@ -356,31 +359,56 @@ function registrationDefaultRole(catalogue: Catalogue, selected: string | undefi
       'missing_default_role',
       'The member registration default role must be retained.',
     );
-  return PublicRegistrationRole;
+  if (!catalogue.roles.some((role) => role.name === name))
+    throw new HttpError(422, 'missing_default_role', 'Select an active registration default role.');
+  return name;
+}
+
+function defaultRolePolicy(
+  catalogue: Catalogue,
+  hasClientPermissions: (name: string) => boolean = () => false,
+) {
+  const roles = new Map(catalogue.roles.map((role) => [role.name, role]));
+  const permissions = new Set(catalogue.permissions.map(({ name }) => name));
+  return (defaultRole: string): boolean => {
+    const pending = [defaultRole];
+    const visited = new Set<string>();
+    while (pending.length > 0) {
+      const name = pending.pop()!;
+      if (visited.has(name)) continue;
+      visited.add(name);
+      const role = roles.get(name);
+      if (!role || hasClientPermissions(name) || name === ProtectedCatalogueRole) return false;
+      for (const reference of role.permissions) {
+        if (
+          name === defaultRole &&
+          permissions.has(reference) &&
+          isDefaultApplicationAccess(reference)
+        )
+          continue;
+        pending.push(reference);
+      }
+    }
+    return true;
+  };
+}
+
+export function defaultRoleOptions(catalogue: Catalogue): string[] {
+  const allowed = defaultRolePolicy(catalogue);
+  return catalogue.roles.map(({ name }) => name).filter(allowed);
 }
 
 function assertUnprivilegedDefaultRole(
   catalogue: Catalogue,
-  defaultRole: string | undefined,
-  hasClientPermissions: (name: string) => boolean = () => false,
+  defaultRole: string,
+  hasClientPermissions?: (name: string) => boolean,
 ): void {
-  if (!defaultRole) return;
-  const roles = new Map(catalogue.roles.map((role) => [role.name, role]));
-  const pending = [defaultRole];
-  const visited = new Set<string>();
-  while (pending.length > 0) {
-    const name = pending.pop()!;
-    if (visited.has(name)) continue;
-    visited.add(name);
-    const role = roles.get(name);
-    if (hasClientPermissions(name) || (!role && name.includes(':')))
-      throw new HttpError(
-        422,
-        'privileged_default_role',
-        'The registration default role cannot grant service access or privileged permissions.',
-      );
-    if (role) pending.push(...role.permissions);
-  }
+  if (!defaultRolePolicy(catalogue, hasClientPermissions)(defaultRole))
+    throw new HttpError(
+      422,
+      'privileged_default_role',
+      'The registration default role can only grant explicit application access permissions.',
+    );
 }
 
 export function writeCatalogue(catalogue: Catalogue, sourceText: string): string {

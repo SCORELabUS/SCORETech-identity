@@ -2,6 +2,7 @@ package es.tentuplaza.identity.emailotp;
 
 import java.lang.reflect.Proxy;
 import java.util.Map;
+import java.util.Set;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.UserModel;
 import org.keycloak.validate.ValidationContext;
@@ -10,12 +11,33 @@ import org.keycloak.userprofile.validator.PersonNameProhibitedCharactersValidato
 
 final class RegistrationPolicy {
   static final String DEFAULT_ROLE = "tentu.registration.default-role";
+  static final String MEMBER = "member";
+  private static final Set<String> INTERNAL_DOMAINS = Set.of(
+      "identity", "admin-web", "account-web", "account", "account-console", "admin-cli",
+      "broker", "keycloak", "realm-admin", "realm-management", "security-admin-console", "system");
+
+  static boolean isDefaultApplicationAccess(String name) {
+    if (!name.matches("[a-z][a-z0-9-]*:access")) return false;
+    String domain = name.substring(0, name.indexOf(':'));
+    return !INTERNAL_DOMAINS.contains(domain) && !domain.startsWith("identity-")
+        && !domain.startsWith("default-roles-");
+  }
 
   static org.keycloak.models.RoleModel defaultRole(org.keycloak.models.RealmModel realm) {
-    String name = realm.getAttribute(DEFAULT_ROLE);
+    return defaultRole(realm, true);
+  }
+
+  static org.keycloak.models.RoleModel publicDefaultRole(org.keycloak.models.RealmModel realm) {
+    return defaultRole(realm, false);
+  }
+
+  private static org.keycloak.models.RoleModel defaultRole(org.keycloak.models.RealmModel realm, boolean allowLegacy) {
+    var registry = AuthorizationResourceFactory.read(realm);
+    boolean managed = registry != null && registry.defaultRole != null;
+    String name = managed ? registry.defaultRole : realm.getAttribute(DEFAULT_ROLE);
+    if (!managed && !allowLegacy && !MEMBER.equals(name)) return null;
     if (name == null || name.isBlank()) return null;
     AuthorizationResourceFactory.name(name);
-    var registry = AuthorizationResourceFactory.read(realm);
     var role = realm.getRole(name);
     var admin = realm.getRole(AuthorizationResourceFactory.ADMIN);
     if (AuthorizationResourceFactory.ADMIN.equals(name) || role == null || role.isClientRole()

@@ -5,7 +5,13 @@ import { z } from 'zod';
 import { asyncHandler } from '../../shared/http/async-handler.js';
 import type { Logger } from '../../shared/logging/logger.js';
 import type { Principal } from '../auth/oidc-authenticator.js';
-import { CatalogueSchema, validateCatalogue, type Catalogue } from './catalogue-model.js';
+import {
+  CatalogueSchema,
+  defaultRoleOptions,
+  isDefaultApplicationAccess,
+  validateCatalogue,
+  type Catalogue,
+} from './catalogue-model.js';
 import type { CatalogueService, CatalogueAuthorization } from './catalogue-service.js';
 import { Environment } from './catalogue-service.js';
 const Sha = z.string().regex(/^[a-f0-9]{64}$/);
@@ -74,6 +80,21 @@ export const assertCatalogueDelegation = (
       .map((permission) => permission.name),
   );
   const protectedActor = current.has('administrador');
+  const previousDefault = previous.defaultRole ?? 'member';
+  const nextDefault = next.defaultRole ?? previousDefault;
+  const previousDefaultGrants = before.roles.get(previousDefault) ?? new Set<string>();
+  const nextDefaultGrants = after.roles.get(nextDefault) ?? new Set<string>();
+  if (
+    !protectedActor &&
+    (previousDefault !== nextDefault ||
+      previousDefaultGrants.size !== nextDefaultGrants.size ||
+      [...nextDefaultGrants].some((permission) => !previousDefaultGrants.has(permission)))
+  )
+    throw new HttpError(
+      403,
+      'protected_configuration',
+      'Only a current identity administrator can change the registration default role or its access.',
+    );
   if (
     (newAtoms.size > 0 ||
       previous.permissions.some(
@@ -184,6 +205,10 @@ export function createCatalogueRouter(service: CatalogueService, logger: Logger)
       res.json({
         ...current,
         capabilities: { managePermissions: protectedActor, manageAccessRules: protectedActor },
+        defaultRoleAccessPermissions: protectedActor
+          ? current.catalogue.permissions.map(({ name }) => name).filter(isDefaultApplicationAccess)
+          : [],
+        defaultRoleOptions: protectedActor ? defaultRoleOptions(current.catalogue) : [],
       });
     }),
   );

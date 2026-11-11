@@ -220,10 +220,10 @@ const publicCatalogue = () => ({
   groups: [],
 });
 
-describe('public membership never grants service access', () => {
-  it('accepts a permission-free default member and rejects direct or inherited access', () => {
+describe('public membership grants only explicit application entry', () => {
+  it('accepts a permission-free default member and rejects direct or inherited administrative access', () => {
     expect(() => validateCatalogue(publicCatalogue())).not.toThrow();
-    for (const permissions of [[view], ['nested-reader']]) {
+    for (const permissions of [[entry], [view], ['nested-reader']]) {
       const catalogue = publicCatalogue();
       catalogue.roles.find((role) => role.name === 'member')!.permissions = permissions;
       expect(() => validateCatalogue(catalogue)).toThrowError(

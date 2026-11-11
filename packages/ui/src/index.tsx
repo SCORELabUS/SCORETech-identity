@@ -46,15 +46,20 @@ export function Field({
   label,
   children,
   hint,
+  required,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  required?: boolean;
 }) {
   const id = useId();
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id}>
+        {label}
+        {required ? <span aria-hidden="true"> *</span> : null}
+      </label>
       {isValidElement(children)
         ? cloneElement(
             children as ReactElement<{

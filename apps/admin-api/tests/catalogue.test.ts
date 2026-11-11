@@ -426,9 +426,9 @@ describe('default role', () => {
     expect(output.realm.settings.defaultRole).toEqual({ name: 'member', composite: false });
     expect(validateCatalogue({ ...previous, defaultRole: undefined }).defaultRole).toBe('member');
   });
-  it('rejects alternate roles, administrator, nonexistent roles and malformed selections', () => {
+  it('rejects administrator, nonexistent roles and malformed selections', () => {
     const previous = readCatalogue(source);
-    for (const defaultRole of ['user', 'administrador', 'missing', '', ['user', 'member'], null])
+    for (const defaultRole of ['administrador', 'missing', '', ['user', 'member'], null])
       expect(() => validateCatalogue({ ...previous, defaultRole }, previous)).toThrow();
   });
   it('forbids deleting member even when another permission-free default is selected', () => {
@@ -443,20 +443,30 @@ describe('default role', () => {
     );
     expect(() => writeCatalogue({ ...previous, roles }, source)).toThrow(/default role/);
   });
-  it('blocks changing the default before granting member service access', () => {
+  it('allows switching the registration default to a role with explicit application access', () => {
     const previous = readCatalogue(source);
     const next = structuredClone(previous);
+    next.permissions.push({ name: 'sphere:access', description: 'Access SPHERE' });
     next.defaultRole = 'user';
-    next.roles.find((role) => role.name === 'member')!.permissions = ['courses:read'];
-    expect(() => validateCatalogue(next, previous)).toThrow(
-      expect.objectContaining({ status: 422, code: 'immutable_default_role' }),
+    next.roles.find((role) => role.name === 'user')!.permissions = ['sphere:access'];
+    const applied = validateCatalogue(next, previous);
+    expect(applied.defaultRole).toBe('user');
+    expect(readCatalogue(writeCatalogue(applied, source)).defaultRole).toBe('user');
+    expect(validateCatalogue({ ...applied, defaultRole: undefined }, applied).defaultRole).toBe(
+      'user',
     );
-    expect(() => writeCatalogue(next, source)).toThrow(
-      expect.objectContaining({ status: 422, code: 'immutable_default_role' }),
-    );
+    expect(() =>
+      validateCatalogue(
+        {
+          ...applied,
+          roles: applied.roles.filter(({ name }) => name !== 'user'),
+        },
+        applied,
+      ),
+    ).toThrow(expect.objectContaining({ code: 'missing_default_role' }));
   });
   it.each(['direct', 'transitive'])(
-    'always keeps member permission-free (%s composition)',
+    'rejects operation permissions in the default role (%s composition)',
     (composition) => {
       const previous = readCatalogue(source);
       const next = structuredClone(previous);

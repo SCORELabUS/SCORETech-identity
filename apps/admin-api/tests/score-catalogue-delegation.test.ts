@@ -34,6 +34,32 @@ const catalogue = (): Catalogue =>
 const role = (value: Catalogue, name: string) => value.roles.find((item) => item.name === name)!;
 
 describe('catalogue role edits respect signed and current delegation', () => {
+  it('reserves default selection and default access grants for a live identity administrator', () => {
+    const previous = catalogue();
+    previous.permissions.push({ name: 'sphere:access', description: '' });
+    role(previous, 'administrador').permissions = previous.permissions.map(({ name }) => name);
+    previous.roles.push({ name: 'public-user', description: '', permissions: ['sphere:access'] });
+    const delegated = manager({
+      roles: [manage, 'sphere:access'],
+      effectiveRoleNames: [manage, 'sphere:access'],
+    });
+    for (const changeDefault of [false, true]) {
+      const next = structuredClone(previous);
+      if (changeDefault) next.defaultRole = 'public-user';
+      else role(next, 'member').permissions = ['sphere:access'];
+      const applied = validateCatalogue(next, previous);
+      expect(() => assertCatalogueDelegation(delegated, applied, previous)).toThrow(
+        expect.objectContaining({ status: 403, code: 'protected_configuration' }),
+      );
+      expect(() =>
+        assertCatalogueDelegation(
+          manager({ effectiveRoleNames: [manage, 'administrador'] }),
+          applied,
+          previous,
+        ),
+      ).not.toThrow();
+    }
+  });
   it('reserves permission deletion for the live protected administrator', () => {
     const previous = catalogue();
     previous.permissions.push({ name: 'sphere:unused', description: 'Unused' });

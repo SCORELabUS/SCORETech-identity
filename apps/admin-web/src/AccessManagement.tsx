@@ -680,6 +680,7 @@ export function DeleteCatalogueEntry({
   const protectedEntry =
     kind === "role"
       ? entry.name === "administrador" ||
+        entry.name === "member" ||
         entry.name === (current.catalogue.defaultRole ?? "member")
       : isProtectedPermission(entry.name);
   const blocked =
