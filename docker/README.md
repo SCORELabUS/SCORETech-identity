@@ -91,11 +91,18 @@ Wait until the latest main commit has a completed release, then update from the
 repository root:
 
 ```bash
-git switch main
 git pull --ff-only origin main
-docker compose -f docker/production/compose.yaml pull
-docker compose -f docker/production/compose.yaml up -d --no-build --remove-orphans --wait --wait-timeout 300
+./docker/update production
 ```
+
+Use `./docker/update staging` for staging. The updater runs in the selected
+deployment directory, so Compose loads its private `.env` and local
+`compose.override.yaml`. It validates configuration quietly, pulls the five
+Identity release images, then waits for Compose to report the stack ready.
+Compose recreates containers whose image or service configuration changed.
+The updater leaves the PostgreSQL image pull and Git checkout to the operator.
+Use the initial setup steps below on a new host. For secret-only changes such as
+rotating `BREVO_API_KEY`, explicitly recreate Keycloak to reload the secret.
 
 A failed/partial image publication never creates a GitHub release. Full SHA tags
 remain available for incident diagnosis and deliberate rollback; normal deployment
@@ -260,12 +267,10 @@ For an Identity update, first back up its PostgreSQL, private runtime/configurat
 and avatar volume using `docs/OPERATIONS.md`. Record the current source SHA and
 latest release, then pull the released main branch. Keep `IDENTITY_VERSION=main`;
 routine updates do not require a checkout to a SHA or a tag edit. Keep all credentials, project names and persistent
-volumes intact. From `docker/production`:
+volumes intact. From the repository root:
 
 ```bash
-docker compose pull
-docker compose up -d --no-build --remove-orphans --wait --wait-timeout 300
-docker compose ps
+./docker/update production
 ```
 
 Verify the public issuer, email delivery, passkey login, both portals and catalogue
