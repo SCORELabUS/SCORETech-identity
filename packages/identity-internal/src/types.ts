@@ -30,6 +30,7 @@ export interface UpdateIdentityUser {
   email?: string;
   emailVerified?: boolean;
   attributes?: Record<string, string[]>;
+  attributeDefaults?: Record<string, string[]>;
   firstName?: string;
   lastName?: string;
   enabled?: boolean;

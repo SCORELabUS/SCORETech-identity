@@ -2,8 +2,8 @@ import { PreferencesWriteSchema, readPreferences } from './preferences.js';
 import { createAccountRateLimit } from './rate-limit.js';
 import { describeDevice, type IdentityAccountClient } from '@scoretech/identity-internal';
 import { Router, raw } from 'express';
-import sharp from 'sharp';
-import { LocalAvatarStorage } from './local-avatar-storage.js';
+import { avatarStorage, normalizeAvatarImage } from './avatar-image.js';
+import { AvatarStorage } from './avatar-storage.js';
 import { SharedProfileSchema, SocialLinksSchema, readSharedProfile } from './shared-profile.js';
 import { z } from 'zod';
 import type { AppConfig } from '../../config/app-config.js';
@@ -11,7 +11,6 @@ import type { Principal } from '@scoretech/identity-internal';
 import type { Logger } from '@scoretech/identity-internal';
 import { asyncHandler } from '@scoretech/identity-internal';
 import { HttpError } from '@scoretech/identity-internal';
-import { AvatarStorage } from './avatar-storage.js';
 
 const Color = z.union([
   z.string().regex(/^#[0-9a-fA-F]{6}$/),
@@ -141,14 +140,7 @@ export const createAccountRouter = (
       );
     }),
   );
-  const storage = config.APP_AVATAR_BUCKET
-    ? new AvatarStorage(config.APP_AVATAR_BUCKET, config.APP_AVATAR_REGION, {
-        endpoint: config.APP_AVATAR_ENDPOINT,
-        forcePathStyle: config.APP_AVATAR_FORCE_PATH_STYLE,
-      })
-    : config.APP_AVATAR_DIRECTORY
-      ? new LocalAvatarStorage(config.APP_AVATAR_DIRECTORY)
-      : undefined;
+  const storage = avatarStorage(config);
   const legacy = {
     violet: 'graphite',
     ocean: 'tentu',
@@ -478,15 +470,7 @@ export const createAccountRouter = (
         );
       let bytes: Buffer;
       try {
-        const image = sharp(request.body, { limitInputPixels: 16_000_000, animated: false });
-        const meta = await image.metadata();
-        if (!['jpeg', 'png', 'webp'].includes(meta.format || '') || (meta.pages || 1) > 1)
-          throw new Error('Invalid image');
-        bytes = await image
-          .rotate()
-          .resize(256, 256, { fit: 'cover' })
-          .webp({ quality: 90 })
-          .toBuffer();
+        bytes = await normalizeAvatarImage(request.body);
       } catch {
         throw new HttpError(400, 'invalid_avatar_image', 'The file is not a supported image.');
       }

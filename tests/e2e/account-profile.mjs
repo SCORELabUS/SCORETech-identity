@@ -1,6 +1,7 @@
 import { chromium, expect } from "@playwright/test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 const root = new URL("../../", import.meta.url).pathname;
 const origin = "http://localhost:18000";
@@ -9,8 +10,8 @@ const artifacts = root + "test-results/account-profile";
 await mkdir(artifacts, { recursive: true });
 function fixture(action) {
   assert.match(email, /^e2e-account-\d+@example\.invalid$/);
-  const script = `const base='http://keycloak:8080/identity/auth';const login=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:'POST',body:new URLSearchParams({grant_type:'password',client_id:'admin-cli',username:'fixture-admin',password:'fixture-local-only'})});if(!login.ok)throw Error('Fixture authentication failed');const {access_token}=await login.json();const headers={Authorization:'Bearer '+access_token,'Content-Type':'application/json'};const url=base+'/admin/realms/score';const email=${JSON.stringify(email)};const action=${JSON.stringify(action)};const users=async()=>{const r=await fetch(url+'/users?email='+encodeURIComponent(email)+'&exact=true',{headers});if(!r.ok)throw Error('Fixture lookup failed');return r.json();};if(action==='create'){const r=await fetch(url+'/users',{method:'POST',headers,body:JSON.stringify({username:email,email,firstName:'Profile',lastName:'Tester',enabled:true,emailVerified:true})});if(r.status!==201)throw Error('Fixture creation failed');}else if(action==='check-deleted'){if((await users()).length)throw Error('Native identity was not deleted');}else{for(const user of await users()){if(user.email!==email)throw Error('Unsafe fixture cleanup');const r=await fetch(url+'/users/'+user.id,{method:'DELETE',headers});if(!r.ok)throw Error('Cleanup failed');}}`;
-  execFileSync(
+  const script = `const base='http://keycloak:8080/identity/auth';const login=await fetch(base+'/realms/master/protocol/openid-connect/token',{method:'POST',body:new URLSearchParams({grant_type:'password',client_id:'admin-cli',username:'fixture-admin',password:'fixture-local-only'})});if(!login.ok)throw Error('Fixture authentication failed');const {access_token}=await login.json();const headers={Authorization:'Bearer '+access_token,'Content-Type':'application/json'};const url=base+'/admin/realms/score';const email=${JSON.stringify(email)};const action=${JSON.stringify(action)};const users=async()=>{const r=await fetch(url+'/users?email='+encodeURIComponent(email)+'&exact=true',{headers});if(!r.ok)throw Error('Fixture lookup failed');return r.json();};if(action==='create'){const r=await fetch(url+'/users',{method:'POST',headers,body:JSON.stringify({username:email,email,firstName:'Profile',lastName:'Tester',enabled:true,emailVerified:true})});if(r.status!==201)throw Error('Fixture creation failed');console.log(new URL(r.headers.get('location')).pathname.split('/').at(-1));}else if(action==='check-deleted'){if((await users()).length)throw Error('Native identity was not deleted');}else{for(const user of await users()){if(user.email!==email)throw Error('Unsafe fixture cleanup');const r=await fetch(url+'/users/'+user.id,{method:'DELETE',headers});if(!r.ok)throw Error('Cleanup failed');}}`;
+  return execFileSync(
     "docker",
     [
       "compose",
@@ -26,8 +27,8 @@ function fixture(action) {
       "-e",
       script,
     ],
-    { cwd: root, stdio: ["pipe", "pipe", "pipe"] },
-  );
+    { cwd: root, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] },
+  ).trim();
 }
 const browser = await chromium.launch({
   headless: true,
@@ -88,9 +89,40 @@ async function editAvatar() {
     .first()
     .click();
 }
+function importProfile(subject, avatar, mode) {
+  const issuer = origin + "/identity/auth/realms/score";
+  const binding = createHash("sha256").update(JSON.stringify([issuer, subject])).digest("hex");
+  return execFileSync("docker", [
+    "compose", "--project-directory", root, "-f", root + "deploy/local/compose.yaml",
+    "exec", "-T", "account-api", "node", "apps/account-api/dist/main/import-sphere-profiles.js", mode,
+  ], {
+    cwd: root,
+    encoding: "utf8",
+    input: JSON.stringify({ issuer, profiles: [{
+      id: "a".repeat(24), binding,
+      profile: { displayName: "SPHERE profile", dateOfBirth: "2000-01-02" },
+      socialLinks: { x: "https://x.com/sphere_fixture" },
+      phone: "+34 600 000 000",
+      avatar: { kind: "photo", bytes: avatar },
+    }] }),
+  });
+}
 try {
-  fixture("create");
-  await page.goto(origin + "/identity/account/");
+  const subject = fixture("create");
+  assert.match(subject, /^[a-f0-9-]{36}$/);
+  const importedAvatar = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#be1d37";
+    context.fillRect(0, 0, 300, 150);
+    return canvas.toDataURL("image/png").split(",")[1];
+  });
+  assert.match(importProfile(subject, importedAvatar, "--plan"), /To fill: 1\. Avatars: 1/);
+  assert.match(importProfile(subject, importedAvatar, "--apply"), /Processed 1 SCORETech profiles/);
+  assert.match(importProfile(subject, importedAvatar, "--plan"), /To fill: 0\. Avatars: 0/);
+  const returnTo = origin + "/sphere-settings-fixture?section=account";
+  const entry = origin + "/identity/account/?" + new URLSearchParams({ return_to: returnTo });
+  await page.goto(entry);
   await page
     .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
     .click();
@@ -98,11 +130,25 @@ try {
   await expect(
     page.getByRole("heading", { name: "Your profile.", exact: true }),
   ).toBeVisible();
+  const backLink = page.getByRole("link", { name: "Back to application", exact: true });
+  await expect(backLink).toHaveAttribute("href", returnTo);
+  await page.route(returnTo, route => route.fulfill({ body: "SPHERE fixture" }));
+  await backLink.click();
+  await page.waitForURL(returnTo);
+  await page.goto(origin + "/identity/account/?return_to=https://untrusted.example.invalid/");
+  await expect(page.getByRole("heading", { name: "Your profile.", exact: true })).toBeVisible();
+  await expect(backLink).toHaveCount(0);
+  await page.goto(entry);
   await page.locator('summary[aria-label="Account menu"]').click();
   await page.getByRole("link", { name: "My profile", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Profile and avatar", exact: true }),
   ).toBeVisible();
+  await expect(backLink).toHaveAttribute("href", returnTo);
+  await expect(page.getByLabel("Display name", { exact: true })).toHaveValue("SPHERE profile");
+  await expect(page.getByLabel("Date of birth", { exact: true })).toHaveValue("2000-01-02");
+  await expect(page.getByLabel("X (Twitter)", { exact: true })).toHaveValue("https://x.com/sphere_fixture");
+  await expect(page.locator(".identity-card .user-avatar img")).toHaveAttribute("src", /^data:image\/webp;base64/);
   await page
     .getByLabel("Display name", { exact: true })
     .fill("SCORE Researcher");
@@ -122,6 +168,7 @@ try {
   await expect(
     page.getByText("Your shared profile has been updated.", { exact: true }),
   ).toBeVisible();
+  assert.match(importProfile(subject, importedAvatar, "--apply"), /Processed 0 SCORETech profiles/);
   await page.reload();
   await expect(page.getByLabel("Display name", { exact: true })).toHaveValue(
     "SCORE Researcher",

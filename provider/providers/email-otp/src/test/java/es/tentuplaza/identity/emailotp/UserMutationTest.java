@@ -65,4 +65,16 @@ class UserMutationTest {
     verify(user).setEmail("new@example.invalid"); verify(user).setEmailVerified(false);
     verify(user, never()).setUsername(anyString());
   }
+  @Test void profileDefaultsFillMissingAttributesOnly() {
+    var user = mock(UserModel.class);
+    when(user.getFirstAttribute("scoreProfile")).thenReturn("{\"displayName\":\"Edited\"}");
+    var defaults = Map.<String,Object>of("attributeDefaults", Map.of("scoreProfile", List.of("{}"),
+        "tentuAvatar", List.of("{\"kind\":\"initials\"}")));
+    assertDoesNotThrow(() -> UserMutationResourceFactory.validate(session, defaults, false));
+    UserMutationResourceFactory.apply(user, defaults);
+    verify(user, never()).setAttribute(eq("scoreProfile"), anyList());
+    verify(user).setAttribute("tentuAvatar", List.of("{\"kind\":\"initials\"}"));
+    assertThrows(BadRequestException.class, () -> UserMutationResourceFactory.validate(session,
+        Map.of("attributeDefaults", Map.of("tentuTermsAcceptedAt", List.of("injected"))), false));
+  }
 }

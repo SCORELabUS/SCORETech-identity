@@ -682,8 +682,17 @@ the provider's existing atomic field patch. Updating either group leaves contact
 data, roles, consent, credentials and the other group intact. Supplying an empty
 group clears its optional values. Profile data is only returned to its owner;
 this feature does not create a public directory or add optional personal data to
-tokens. Each future service integration must define the data it consumes and its
-public visibility. SPHERE/SPACE data has not been migrated.
+tokens. Each service integration defines the data it consumes and its public
+visibility. SPHERE's `docker/migrate-scoretech-users --profiles` command can
+backfill these groups, phone and avatar from already-linked SPHERE accounts.
+It uses the existing identity binding and only fills missing groups. Deploy
+the provider and Account API with profile import support before running it.
+
+Applications may open Account with a `return_to` query parameter containing
+the page to return to. Account validates the URL and shows **Back to application**
+after sign-in. Same-origin application pages are accepted automatically. Set
+`IDENTITY_ACCOUNT_RETURN_ORIGINS` to a comma-separated list of exact HTTPS
+origins for applications on other hosts, then rerender Identity's configuration.
 
 The avatar editor reuses SPHERE's SVG artwork, initials, paginated artwork picker,
 foreground/background palettes and `react-easy-crop` workflow. The palette defaults

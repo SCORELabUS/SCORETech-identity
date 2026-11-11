@@ -21,6 +21,7 @@ export interface IdentityConfig {
   adminUrl: string;
   accountApiUrl: string;
   adminApiUrl: string;
+  accountReturnOrigins?: string[];
   lab?: boolean;
 }
 declare global {
@@ -31,6 +32,26 @@ declare global {
 export const config = window.__SCORE_CONFIG__;
 if (!config?.issuer || !config.baseUrl || !config.clientId)
   throw new Error("Identity public configuration is missing.");
+export function accountReturnUrl(value = new URLSearchParams(location.search).get("return_to")) {
+  if (config.kind !== "account") return;
+  if (!value || value.length > 2048) return;
+  try {
+    const url = new URL(value);
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username || url.password ||
+      (url.origin !== config.origin && !config.accountReturnOrigins?.includes(url.origin)) ||
+      (url.origin === config.origin && (url.pathname === config.basePath || url.pathname.startsWith(config.basePath + "/")))
+    ) return;
+    return url.href;
+  } catch {
+    return;
+  }
+}
+
+function navigationState() {
+  return { hash: location.hash, returnTo: accountReturnUrl() };
+}
 export const manager = new UserManager({
   authority: config.issuer,
   client_id: config.clientId,
@@ -102,9 +123,13 @@ async function initialize() {
     new URL(config.baseUrl).pathname + "auth/callback"
   ) {
     const user = await manager.signinRedirectCallback();
-    const state = user.state as { hash?: string } | undefined;
+    const state = user.state as { hash?: string; returnTo?: string } | undefined;
     sessionStorage.removeItem("score.invitation.ticket");
-    history.replaceState({}, "", config.baseUrl + (state?.hash || ""));
+    const destination = new URL(config.baseUrl);
+    const returnTo = accountReturnUrl(state?.returnTo ?? null);
+    if (returnTo) destination.searchParams.set("return_to", returnTo);
+    destination.hash = state?.hash || "";
+    history.replaceState({}, "", destination.href);
     return user;
   }
   if (location.pathname === new URL(config.baseUrl).pathname + "invite") {
@@ -234,7 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError("");
     await manager.signinRedirect({
       ui_locales: "en",
-      state: { hash: location.hash },
+      state: navigationState(),
     });
   }, []);
   const signOut = useCallback(async () => {
@@ -293,7 +318,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const accountAction = useCallback(async (action: string) => {
     await manager.signinRedirect({
       ui_locales: "en",
-      state: { hash: location.hash },
+      state: navigationState(),
       ...(action === "tentu-register-passkey"
         ? { max_age: 300 }
         : { prompt: "login", max_age: 0 }),
