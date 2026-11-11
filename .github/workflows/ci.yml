@@ -21,7 +21,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm exec playwright install --with-deps chromium
+      # The hosted Ubuntu runner already supplies Chromium's runtime libraries.
+      - run: pnpm exec playwright install chromium
       # The provider Docker build includes its Java regression suite.
       - run: ./lab up
       - run: ./lab check
