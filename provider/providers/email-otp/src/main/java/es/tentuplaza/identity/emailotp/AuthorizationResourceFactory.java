@@ -33,6 +33,8 @@ public final class AuthorizationResourceFactory implements RealmResourceProvider
     public String environment;
     public long generation;
     public String revision;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    public String defaultRole;
     public List<Permission> permissions = new ArrayList<>();
     public List<OwnershipMigration> ownershipMigrations = new ArrayList<>();
     public List<Role> roles = new ArrayList<>();
@@ -97,6 +99,8 @@ public final class AuthorizationResourceFactory implements RealmResourceProvider
       if ("true".equals(session.getContext().getRealm().getAttribute("score.catalogue.database-managed")))
         throw new ClientErrorException("Use the transactional database catalogue API", 409);
       validate(registry);
+      if (registry.defaultRole != null)
+        throw new BadRequestException("Change the registration default through the database catalogue");
       var realm = session.getContext().getRealm();
       acquire(session, realm);
       var previous = read(realm);

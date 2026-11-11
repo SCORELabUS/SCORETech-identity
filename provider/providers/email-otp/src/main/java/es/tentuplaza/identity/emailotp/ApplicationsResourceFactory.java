@@ -195,7 +195,7 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
         || !"S256".equals(client.getAttribute("pkce.code.challenge.method"))
         || !Objects.equals(client.getWebOrigins(), Set.of(value.origin))
         || !Objects.equals(client.getRedirectUris(), new HashSet<>(value.redirectUris))
-        || !String.join("##", value.postLogoutRedirectUris).equals(client.getAttribute(LOGOUT)))
+        || !String.join("##", value.postLogoutRedirectUris).equals(Objects.toString(client.getAttribute(LOGOUT), "")))
       throw conflict("Native client settings do not match the managed application configuration.");
     for (String permission : value.requiredPermissions) {
       var role = realm.getRole(permission);

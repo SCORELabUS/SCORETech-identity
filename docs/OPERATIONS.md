@@ -30,8 +30,8 @@ RP ID is not interchangeable with one registered for `127.0.0.1`.
 The seeded `admin-score@example.invalid`, `support@example.invalid` and
 `person@example.invalid` accounts have no passwords. Mailpit captures their email
 codes. The first two have administrative access and must enroll/use a passkey;
-`support` has read-only operations. A public registration can use Account without
-receiving Admin or other protected-service access.
+`support` has read-only operations. A public registration can use Account and
+inherits any application entry permissions explicitly configured in its default role.
 
 Account's **Preferences** page saves light/dark mode and shows a website preview.
 Security starts with method cards and counts; open Passkeys, Authenticator app or
@@ -201,14 +201,23 @@ new atoms must use an application namespace. The reserved domains are `identity`
 `realm-management`, `security-admin-console` and `system`; prefixes `identity-*`
 and `default-roles-*` are also reserved. The server derives the protected
 `administrador` role from the complete permission catalogue. Do not customize that
-role's references manually. Public-registration defaults remain unprivileged and
-cannot grant protected-service access.
+role's references manually. Public-registration defaults can grant declared
+application entry permissions. Operation permissions and Identity administration
+require a separate role assignment.
 
 Every change includes a reason of at least eight characters and the base database
 revision. A successful save is active immediately; stale editors receive 409 and
 a failed native write rolls back the registry, roles and audit entry together.
 History is stored in `SCORE_CATALOGUE_REVISION` and restores are new audited changes.
 Account and Admin read the live database catalogue, never a generated projection.
+
+In **Admin → Roles**, the protected Admin can edit the default role's application
+entry permissions, such as `sphere:access`, or choose **Change default role**.
+The selected role can grant declared application entry permissions directly.
+Changing the selection applies to future registrations and users created in Admin.
+Existing users keep their assigned roles; editing a role changes what its existing
+members can access. Assign the selected role separately to existing accounts that
+should receive it.
 
 The deployment setup client retains realm/client-management capability for
 once-only managed configuration, separate from normal browser credentials. Admin

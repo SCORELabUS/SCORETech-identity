@@ -51,6 +51,7 @@ test("release notes include commits, all artifacts and main-based update command
   });
   assert.match(notes, /fix\(auth\): keep SSO stable/);
   assert.match(notes, /git pull --ff-only origin main/);
+  assert.match(notes, /\.\/docker\/update production/);
   assert.match(notes, /IDENTITY_VERSION=main/);
   assert.ok(!notes.includes("checkout --detach"));
   for (const image of ["provider", "account", "admin", "gateway", "tooling"])

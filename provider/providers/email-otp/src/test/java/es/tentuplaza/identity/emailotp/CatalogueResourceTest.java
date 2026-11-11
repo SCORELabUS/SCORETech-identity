@@ -29,6 +29,23 @@ class CatalogueResourceTest {
     var value=registry();value.roles.get(1).permissions=List.of("retired");value.roles.get(2).permissions=List.of("sphere:admin");
     assertThrows(BadRequestException.class,()->CatalogueResourceFactory.project(value,List.of("administrador","member","retired")));
   }
+  @Test void activeRegistrationDefaultCanGrantOnlyDirectApplicationEntry() {
+    var value = registry();
+    var permission = new AuthorizationResourceFactory.Permission();
+    permission.name = "sphere:access";
+    value.permissions.add(permission);
+    value.defaultRole = "retired";
+    value.roles.get(2).permissions = List.of(permission.name);
+    var active = List.of("administrador", "member", "retired");
+    assertEquals("retired", CatalogueResourceFactory.project(value, active).get("defaultRole"));
+    for (var rejected : List.of("sphere:admin", "sphere:admin:access", "admin-web:access", "account-web:access")) {
+      permission.name = rejected;
+      value.roles.get(2).permissions = List.of(rejected);
+      assertThrows(BadRequestException.class, () -> CatalogueResourceFactory.project(value, active));
+    }
+    value.defaultRole = "administrador";
+    assertThrows(BadRequestException.class, () -> CatalogueResourceFactory.project(value, active));
+  }
   @Test void auditProjectionDoesNotExposeRestorablePayload() {
     var entry=new CatalogueRevisionEntity();entry.id="a".repeat(64);entry.environment="local";entry.actor="actor";entry.reason="Changed roles";entry.operation="publish";entry.createdAt=0;entry.catalogue="private-payload";
     var operation=CatalogueResourceFactory.operation(entry);

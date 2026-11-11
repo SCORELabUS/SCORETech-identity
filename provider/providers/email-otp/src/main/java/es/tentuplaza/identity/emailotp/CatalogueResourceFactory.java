@@ -60,20 +60,29 @@ public final class CatalogueResourceFactory implements RealmResourceProviderFact
         if (names.contains(reference) && !selected.contains(reference)) throw new BadRequestException("Active roles cannot inherit retired roles");
     }
     for (var group : registry.groups) if (!selected.containsAll(group.roles)) throw new BadRequestException("A group references a retired role");
-    var pending = new ArrayDeque<String>(); pending.add("member");
+    var atoms = new HashSet<String>();
+    for (var permission : registry.permissions) atoms.add(permission.name);
+    String defaultRole = registry.defaultRole == null ? RegistrationPolicy.MEMBER : registry.defaultRole;
+    if (!selected.contains(defaultRole)) throw new BadRequestException("The registration default role must be active");
+    var pending = new ArrayDeque<String>(); pending.add(defaultRole);
     var visited = new HashSet<String>();
     while (!pending.isEmpty()) {
       String name = pending.removeFirst(); if (!visited.add(name)) continue;
       var role = byName.get(name);
-      if (role == null || "administrador".equals(name)) throw new BadRequestException("The registration role must remain unprivileged");
-      pending.addAll(role.permissions);
+      if (role == null || "administrador".equals(name))
+        throw new BadRequestException("The registration role can only grant explicit application access permissions");
+      for (String reference : role.permissions) {
+        if (defaultRole.equals(name) && atoms.contains(reference)
+            && RegistrationPolicy.isDefaultApplicationAccess(reference)) continue;
+        pending.add(reference);
+      }
     }
     var roles = registry.roles.stream().filter(role -> selected.contains(role.name)).map(role ->
         Map.of("name", role.name, "description", Objects.toString(role.description, ""), "permissions", role.permissions)).toList();
     var permissions = registry.permissions.stream().map(permission ->
         Map.of("name", permission.name, "description", Objects.toString(permission.description, ""))).toList();
     var groups = registry.groups.stream().map(group -> Map.of("name", group.name, "roles", group.roles)).toList();
-    return Map.of("defaultRole", "member", "permissions", permissions, "roles", roles,
+    return Map.of("defaultRole", defaultRole, "permissions", permissions, "roles", roles,
         "groups", groups, "accessRules", registry.accessRules == null ? List.of() : registry.accessRules);
   }
   static Map<String,Object> operation(CatalogueRevisionEntity entry) {
@@ -163,6 +172,7 @@ public final class CatalogueResourceFactory implements RealmResourceProviderFact
       if (input == null || !previous.revision.equals(input.baseRevision)) throw new ClientErrorException("The catalogue has changed. Reload before saving.", 409);
       var registry = input.registry;
       AuthorizationResourceFactory.validate(registry);
+      if (registry.defaultRole == null) registry.defaultRole = previous.defaultRole;
       if (!previous.environment.equals(registry.environment) || registry.generation != previous.generation + 1
           || registry.revision.equals(previous.revision) || !registry.revision.matches("[a-f0-9]{64}")) throw new ClientErrorException("Invalid catalogue generation", 409);
       if (em().find(CatalogueRevisionEntity.class, registry.revision) != null) throw new ClientErrorException("Catalogue revision already exists", 409);

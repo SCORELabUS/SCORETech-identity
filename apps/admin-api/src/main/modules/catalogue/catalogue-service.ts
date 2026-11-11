@@ -217,6 +217,7 @@ export class CatalogueService {
       );
     const registry = {
       ...old,
+      defaultRole: next.defaultRole,
       generation: old.generation + 1,
       permissions: next.permissions.map((permission) => ({
         ...permission,
@@ -269,6 +270,7 @@ export class CatalogueService {
     const roles = new Set(historical.catalogue.roles.map((role) => role.name));
     const catalogue = {
       ...historical.catalogue,
+      defaultRole: historical.catalogue.defaultRole ?? 'member',
       permissions: previous.permissions,
       roles: historical.catalogue.roles.map((role) =>
         role.name === 'administrador'

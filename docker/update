@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+usage() {
+  printf 'Usage: docker/update [production|staging]\n'
+}
+
+if [[ $# -gt 1 ]]; then
+  usage >&2
+  exit 2
+fi
+
+environment="${1:-production}"
+case "$environment" in
+  production|staging) ;;
+  -h|--help) usage; exit 0 ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+docker_directory="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+cd -- "$docker_directory/$environment"
+
+# Run in the deployment directory so Compose loads its private .env and override.
+docker compose config --quiet
+printf 'Downloading SCORETech Identity images for %s.\n' "$environment"
+docker compose pull render keycloak realm-setup catalogue-init account-api admin-api gateway
+
+# Use the images from that pull and let Compose decide which containers changed.
+docker compose up -d --no-build --pull never --wait --wait-timeout 300
+printf 'SCORETech Identity (%s) is ready.\n' "$environment"

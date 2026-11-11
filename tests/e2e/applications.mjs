@@ -167,15 +167,20 @@ export async function verifyApplications({
       name: "Create application",
       exact: true,
     });
-    await dialog.getByLabel("Name", { exact: true }).fill(name);
+    await dialog.getByRole("textbox", { name: "Name", exact: true }).fill(name);
     await dialog
-      .getByLabel("Application type", { exact: true })
+      .getByRole("combobox", { name: "Application type", exact: true })
       .selectOption(kind);
-    await dialog.getByLabel("Application origin", { exact: true }).fill(origin);
-    await dialog.getByLabel("Redirect URLs", { exact: true }).fill(callback);
     await dialog
-      .getByLabel("Post-logout URLs", { exact: true })
-      .fill(origin + "/identity/account/");
+      .getByRole("textbox", { name: "Application origin", exact: true })
+      .fill(origin);
+    await dialog
+      .getByRole("textbox", { name: "Redirect URLs", exact: true })
+      .fill(callback);
+    if (kind === "public")
+      await dialog
+        .getByLabel("Post-logout URLs", { exact: true })
+        .fill(origin + "/identity/account/");
     await dialog
       .getByLabel("Filter application permissions", { exact: true })
       .fill(permission);
@@ -195,6 +200,10 @@ export async function verifyApplications({
     );
     const result = await response.json();
     assert.equal(result.application.name, name);
+    assert.deepEqual(
+      result.application.postLogoutRedirectUris,
+      kind === "public" ? [origin + "/identity/account/"] : [],
+    );
     assert.match(result.application.clientId, /^score-app-[a-f0-9-]{36}$/);
     owned.push({ clientId: result.application.clientId, name });
     await dialog.waitFor({ state: "hidden" });
@@ -691,7 +700,7 @@ export async function verifyApplications({
           exact: true,
         });
         await dialog
-          .getByLabel("Application type", { exact: true })
+          .getByRole("combobox", { name: "Application type", exact: true })
           .selectOption(kind);
         await dialog.getByRole("note").waitFor();
         const cancel = dialog.getByRole("button", {

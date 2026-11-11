@@ -1,6 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ApplicationsPage } from "./ApplicationsPage";
-import { DeleteCatalogueEntry, PermissionsPage } from "./AccessManagement";
+import {
+  DeleteCatalogueEntry,
+  PermissionsPage,
+  type Catalogue,
+  type Current as CatalogueSnapshot,
+} from "./AccessManagement";
 import {
   Users,
   MailPlus,
@@ -52,17 +57,11 @@ interface Role {
   description: string;
   permissions: string[];
 }
-interface Catalogue {
-  permissions: { name: string; description: string }[];
-  roles: Role[];
-  groups: { name: string; roles: string[] }[];
-  defaultRole?: string;
-}
-interface Current {
-  baseSha: string;
+interface Current extends CatalogueSnapshot {
   environment: string;
   revision: string;
-  catalogue: Catalogue;
+  defaultRoleAccessPermissions?: string[];
+  defaultRoleOptions?: string[];
 }
 interface Invitation {
   id: string;
@@ -670,8 +669,8 @@ function UserEditor({
       ) : tab === "roles" ? (
         <>
           <p className="muted text-small">
-            Select roles from the active catalogue. Unavailable
-            definitions cannot be assigned.
+            Select roles from the active catalogue. Unavailable definitions
+            cannot be assigned.
           </p>
           {catalogue.error ? <Notice message={catalogue.error} /> : null}
           <div className="check-list">
@@ -1466,6 +1465,7 @@ function Roles() {
   }>(config.adminApiUrl + "/catalogue/revisions");
   const task = useTask();
   const [deleting, setDeleting] = useState<Role>();
+  const [changingDefault, setChangingDefault] = useState(false);
   const [editing, setEditing] = useState<Role | null | undefined>(),
     [reason, setReason] = useState("");
   useEffect(() => {
@@ -1477,25 +1477,23 @@ function Roles() {
     status.reload();
     history.reload();
   };
-  const publish = (catalogue: Catalogue) =>
-    task.execute(
-      "Roles saved. Changes are active.",
-      async () => {
-        await api(config.adminApiUrl + "/catalogue/revisions", {
-          method: "POST",
-          body: JSON.stringify({
-            baseSha: current.data!.baseSha,
-            catalogue,
-            reason,
-            environments: [config.environment],
-            sourceEnvironment: config.environment,
-          }),
-        });
-        setEditing(undefined);
-        setReason("");
-        refresh();
-      },
-    );
+  const publish = (catalogue: Catalogue, changeReason = reason) =>
+    task.execute("Roles saved. Changes are active.", async () => {
+      await api(config.adminApiUrl + "/catalogue/revisions", {
+        method: "POST",
+        body: JSON.stringify({
+          baseSha: current.data!.baseSha,
+          catalogue,
+          reason: changeReason,
+          environments: [config.environment],
+          sourceEnvironment: config.environment,
+        }),
+      });
+      setEditing(undefined);
+      setChangingDefault(false);
+      setReason("");
+      refresh();
+    });
   const query = search.trim().toLowerCase();
   const roles =
     current.data?.catalogue.roles.filter((role) =>
@@ -1523,10 +1521,21 @@ function Roles() {
         description="A role groups service access and operation permissions. People inherit access through their assigned roles."
         actions={
           can("identity:roles:manage") ? (
-            <Button onClick={() => setEditing(null)}>
-              <Plus size={17} />
-              Create role
-            </Button>
+            <div className="button-group">
+              {current.data?.capabilities?.managePermissions ? (
+                <Button
+                  variant="secondary"
+                  disabled={task.busy || current.loading}
+                  onClick={() => setChangingDefault(true)}
+                >
+                  Change default role
+                </Button>
+              ) : null}
+              <Button onClick={() => setEditing(null)}>
+                <Plus size={17} />
+                Create role
+              </Button>
+            </div>
           ) : null
         }
       >
@@ -1583,7 +1592,7 @@ function Roles() {
                               <Badge>Protected</Badge>
                             ) : role.name ===
                               current.data?.catalogue.defaultRole ? (
-                              <Badge>Member baseline</Badge>
+                              <Badge>Default for new users</Badge>
                             ) : null}
                           </small>
                         </div>
@@ -1630,6 +1639,7 @@ function Roles() {
                             aria-label={"Delete role " + role.name}
                             title={
                               role.name === "administrador" ||
+                              role.name === "member" ||
                               role.name ===
                                 (current.data?.catalogue.defaultRole ??
                                   "member")
@@ -1639,6 +1649,7 @@ function Roles() {
                             disabled={
                               task.busy ||
                               role.name === "administrador" ||
+                              role.name === "member" ||
                               role.name ===
                                 (current.data?.catalogue.defaultRole ??
                                   "member")
@@ -1763,7 +1774,102 @@ function Roles() {
           onPublish={publish}
         />
       ) : null}
+      {changingDefault && current.data ? (
+        <DefaultRoleDialog
+          current={current.data}
+          busy={task.busy}
+          error={task.error}
+          onClose={() => setChangingDefault(false)}
+          onPublish={publish}
+        />
+      ) : null}
     </>
+  );
+}
+function DefaultRoleDialog({
+  current,
+  busy,
+  error,
+  onClose,
+  onPublish,
+}: {
+  current: Current;
+  busy: boolean;
+  error: string;
+  onClose: () => void;
+  onPublish: (catalogue: Catalogue, reason: string) => Promise<boolean>;
+}) {
+  const previous = current.catalogue.defaultRole ?? "member";
+  const [selected, setSelected] = useState(previous);
+  const [reason, setReason] = useState("");
+  const options = current.catalogue.roles.filter((role) =>
+    current.defaultRoleOptions?.includes(role.name),
+  );
+  const canSave =
+    !busy &&
+    selected !== previous &&
+    options.some(({ name }) => name === selected) &&
+    reason.trim().length >= 8;
+  return (
+    <Dialog
+      title="Change default role"
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+    >
+      <Notice message={error} />
+      <form
+        className="form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canSave)
+            void onPublish(
+              { ...current.catalogue, defaultRole: selected },
+              reason,
+            );
+        }}
+      >
+        <Field
+          label="Default role"
+          hint="New users receive this role. Existing assignments stay in place."
+        >
+          <select
+            className="cursor-pointer"
+            required
+            value={selected}
+            onChange={(event) => setSelected(event.target.value)}
+          >
+            {options.map((role) => (
+              <option key={role.name} value={role.name}>
+                {renderRoleLabel(role)} ({role.name})
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Reason for this change">
+          <textarea
+            required
+            minLength={8}
+            maxLength={300}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+        <div className="form-actions">
+          <Button
+            type="button"
+            variant="quiet"
+            onClick={onClose}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            Save default role
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 function RoleEditor({
@@ -1789,7 +1895,7 @@ function RoleEditor({
     [description, setDescription] = useState(role?.description || ""),
     [permissions, setPermissions] = useState(role?.permissions || []),
     [preview, setPreview] = useState(false);
-  const baseline = role?.name === current.catalogue.defaultRole;
+  const baseline = role?.name === (current.catalogue.defaultRole ?? "member");
   const added = permissions.filter((p) => !role?.permissions.includes(p)),
     removed = (role?.permissions || []).filter((p) => !permissions.includes(p));
   const submit = (e: FormEvent) => {
@@ -1807,6 +1913,11 @@ function RoleEditor({
   };
   const groups = new Map<string, { name: string; description: string }[]>();
   for (const permission of current.catalogue.permissions) {
+    if (
+      baseline &&
+      !current.defaultRoleAccessPermissions?.includes(permission.name)
+    )
+      continue;
     const key = permission.name.split(":")[0];
     groups.set(key, [...(groups.get(key) || []), permission]);
   }
@@ -1858,9 +1969,22 @@ function RoleEditor({
             {baseline ? (
               <Notice
                 tone="info"
-                message="The member baseline cannot grant service access or operation permissions."
+                message={
+                  current.capabilities?.managePermissions
+                    ? "Everyone with the default role receives the selected application access permissions."
+                    : "Only Identity administrators can change default application access."
+                }
               />
-            ) : (
+            ) : null}
+            {baseline &&
+            current.capabilities?.managePermissions &&
+            groups.size === 0 ? (
+              <p className="muted">
+                Create an application access permission, such as sphere:access,
+                in Permissions first.
+              </p>
+            ) : null}
+            {groups.size > 0 ? (
               <div className="check-list">
                 {Array.from(groups.entries()).map(([service, entries]) => (
                   <fieldset
@@ -1895,7 +2019,7 @@ function RoleEditor({
                   </fieldset>
                 ))}
               </div>
-            )}
+            ) : null}
           </>
         )}
         <div className="form-actions">

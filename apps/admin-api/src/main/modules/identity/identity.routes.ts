@@ -9,6 +9,7 @@ import type { Principal } from '../auth/oidc-authenticator.js';
 import type { AppConfig } from '../../config/app-config.js';
 import type { IdentityAdminClient } from './types.js';
 import { ProviderCatalogueClient } from '@scoretech/identity-internal';
+import { isDefaultApplicationAccess } from '../catalogue/catalogue-model.js';
 
 const UserIdSchema = z.string().uuid();
 const QueryBoolean = z
@@ -66,6 +67,7 @@ const BatchRolesSchema = z
   );
 
 const ActiveRegistrySchema = z.object({
+  defaultRole: z.string().optional(),
   environment: z.enum(['local', 'staging', 'production']),
   generation: z.number().int().positive(),
   revision: z.string().regex(/^[a-f0-9]{64}$/),
@@ -88,7 +90,10 @@ const loadActiveRegistry = async (config: AppConfig | undefined): Promise<Active
   const state = z
     .object({
       registry: ActiveRegistrySchema,
-      catalogue: z.object({ roles: z.array(z.object({ name: z.string() })) }),
+      catalogue: z.object({
+        defaultRole: z.string().optional(),
+        roles: z.array(z.object({ name: z.string() })),
+      }),
     })
     .parse(await client.request());
   if (state.registry.environment !== config.APP_IDENTITY_ENVIRONMENT)
@@ -98,7 +103,11 @@ const loadActiveRegistry = async (config: AppConfig | undefined): Promise<Active
       'The stored catalogue belongs to another environment.',
     );
   const roles = new Set(state.catalogue.roles.map((role) => role.name));
-  return { ...state.registry, roles: state.registry.roles.filter((role) => roles.has(role.name)) };
+  return {
+    ...state.registry,
+    defaultRole: state.catalogue.defaultRole ?? state.registry.defaultRole,
+    roles: state.registry.roles.filter((role) => roles.has(role.name)),
+  };
 };
 
 const rolePermissions = (registry: ActiveRegistry, requested: readonly string[]): Set<string> => {
@@ -442,16 +451,23 @@ export const createIdentityRouter = (
     asyncHandler(async (request, response) => {
       const input = CreateUserSchema.parse(request.body);
       const { sendVerifyEmail, ...user } = input;
-      if (rolePermissions(await registry(), ['member']).size > 0)
+      const applied = await registry();
+      const defaultRole = applied.defaultRole ?? 'member';
+      if (
+        defaultRole === 'administrador' ||
+        [...rolePermissions(applied, [defaultRole])].some(
+          (name) => !isDefaultApplicationAccess(name),
+        )
+      )
         throw new HttpError(
           409,
           'privileged_member_role',
-          'The default member role must not grant service access.',
+          'The registration default role contains a permission outside application access.',
         );
       const userId = await client.createUser(user);
       let setupPending = false;
       try {
-        await client.replaceManagedRealmRoles(userId, ['member']);
+        await client.replaceManagedRealmRoles(userId, [defaultRole]);
         if (sendVerifyEmail)
           await client.executeActionsEmail(userId, ['VERIFY_EMAIL'], verificationOptions());
       } catch {

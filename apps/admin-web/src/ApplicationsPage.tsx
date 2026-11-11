@@ -615,7 +615,7 @@ function ApplicationForm({
             <input readOnly value={application.clientId} />
           </Field>
         ) : null}
-        <Field label="Name">
+        <Field label="Name" required>
           <input
             required
             maxLength={150}
@@ -626,6 +626,7 @@ function ApplicationForm({
         </Field>
         <Field
           label="Application type"
+          required
           hint={
             application
               ? "Changing type updates credentials and ends sign-in sessions that used this application."
@@ -634,6 +635,7 @@ function ApplicationForm({
         >
           <select
             className="cursor-pointer"
+            required
             disabled={task.busy}
             value={kind}
             onChange={(event) => setKind(event.target.value as ApplicationKind)}
@@ -659,6 +661,7 @@ function ApplicationForm({
         ) : null}
         <Field
           label="Application origin"
+          required
           hint="One exact HTTPS origin with no trailing slash or path. HTTP loopback is allowed only locally."
         >
           <input
@@ -673,6 +676,7 @@ function ApplicationForm({
         </Field>
         <Field
           label="Redirect URLs"
+          required
           hint="One exact callback URL per line, on the application origin. Between 1 and 10 URLs; no wildcards."
         >
           <textarea
@@ -696,7 +700,9 @@ function ApplicationForm({
           />
         </Field>
         <fieldset className="applications-permission-picker">
-          <legend>Required permissions</legend>
+          <legend>
+            Required permissions<span aria-hidden="true"> *</span>
+          </legend>
           <p>Members must have every selected permission to sign in.</p>
           <Notice message={permissionsError} />
           {permissionsLoading ? (
