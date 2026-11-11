@@ -16,6 +16,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
 import org.jboss.logging.Logger;
@@ -74,6 +75,12 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
 
     record Profile(String id, String email, String firstName, String lastName) {}
 
+    private static final class InvalidCasResponse extends IllegalArgumentException {
+        private InvalidCasResponse(String reason) {
+            super(reason);
+        }
+    }
+
     static final class CasRejection extends IllegalArgumentException {
         CasRejection(String code) {
             super(switch (code) {
@@ -85,7 +92,7 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
     }
 
     static Profile parseProfile(byte[] xml) throws Exception {
-        if (xml.length == 0 || xml.length > MAX_RESPONSE) throw new IllegalArgumentException("Invalid CAS response size");
+        if (xml.length == 0 || xml.length > MAX_RESPONSE) throw new InvalidCasResponse("invalid_body_size");
         var factory = DocumentBuilderFactory.newInstance();
         factory.setNamespaceAware(true);
         factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
@@ -103,29 +110,33 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
         });
         var doc = builder.parse(new ByteArrayInputStream(xml));
         var root = doc.getDocumentElement();
-        if (!CAS_NS.equals(root.getNamespaceURI()) || !"serviceResponse".equals(root.getLocalName())) throw new IllegalArgumentException("Invalid CAS envelope");
+        if (!CAS_NS.equals(root.getNamespaceURI()) || !"serviceResponse".equals(root.getLocalName()))
+            throw new InvalidCasResponse("invalid_envelope");
         Element result = null;
         for (var child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (!(child instanceof Element element)) continue;
-            if (!CAS_NS.equals(element.getNamespaceURI()) || result != null)
-                throw new IllegalArgumentException("Ambiguous CAS response");
+            if (!CAS_NS.equals(element.getNamespaceURI())) throw new InvalidCasResponse("invalid_result_namespace");
+            if (result != null) throw new InvalidCasResponse("multiple_results");
             result = element;
         }
-        if (result == null) throw new IllegalArgumentException("Missing CAS result");
+        if (result == null) throw new InvalidCasResponse("missing_result");
         if ("authenticationFailure".equals(result.getLocalName())) throw new CasRejection(result.getAttribute("code"));
-        if (!"authenticationSuccess".equals(result.getLocalName())) throw new IllegalArgumentException("Invalid CAS result");
+        if (!"authenticationSuccess".equals(result.getLocalName())) throw new InvalidCasResponse("invalid_result");
         String id = null; Element attributes = null;
         for (var child = result.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (!(child instanceof Element element) || !CAS_NS.equals(element.getNamespaceURI())) continue;
             if ("user".equals(element.getLocalName())) {
-                if (id != null || element.getChildNodes().getLength() != 1) throw new IllegalArgumentException("Ambiguous CAS identity");
+                if (id != null) throw new InvalidCasResponse("multiple_users");
+                if (element.getElementsByTagName("*").getLength() != 0)
+                    throw new InvalidCasResponse("invalid_user_content");
                 id = element.getTextContent().trim();
             } else if ("attributes".equals(element.getLocalName())) {
-                if (attributes != null) throw new IllegalArgumentException("Ambiguous CAS attributes");
+                if (attributes != null) throw new InvalidCasResponse("multiple_attribute_blocks");
                 attributes = element;
             }
         }
-        if (id == null || !id.matches("[A-Za-z0-9._@-]{1,200}")) throw new IllegalArgumentException("Invalid CAS identity");
+        if (id == null) throw new InvalidCasResponse("missing_user");
+        if (!id.matches("[A-Za-z0-9._@-]{1,200}")) throw new InvalidCasResponse("invalid_user");
         String first = attribute(attributes, "givenname");
         String last = String.join(" ", attribute(attributes, "schacsn1"), attribute(attributes, "schacsn2")).trim();
         if (last.isEmpty()) last = attribute(attributes, "sn");
@@ -138,9 +149,10 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
         String result = "";
         for (var child = attributes.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (child instanceof Element element && CAS_NS.equals(element.getNamespaceURI()) && name.equalsIgnoreCase(element.getLocalName())) {
-                if (!result.isEmpty()) throw new IllegalArgumentException("Ambiguous CAS attribute");
-                result = element.getTextContent().trim();
-                if (result.length() > 1024) throw new IllegalArgumentException("Oversized CAS attribute");
+                String value = element.getTextContent().trim();
+                if (value.isEmpty()) continue;
+                if (value.length() > 1024 || (!result.isEmpty() && !result.equals(value))) return "";
+                result = value;
             }
         }
         return result;
@@ -201,6 +213,10 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
                     return callback.authenticated(identity);
                 } catch (CasRejection rejection) {
                     return failure("cas_rejected", rejection.getMessage());
+                } catch (InvalidCasResponse error) {
+                    return failure(stage, error.getMessage());
+                } catch (WebApplicationException error) {
+                    return failure(stage, "HTTP_" + error.getResponse().getStatus());
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
                     return failure(stage, "interrupted");

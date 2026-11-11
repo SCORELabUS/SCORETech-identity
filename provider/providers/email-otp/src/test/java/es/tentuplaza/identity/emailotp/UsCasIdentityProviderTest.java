@@ -24,6 +24,32 @@ class UsCasIdentityProviderTest {
     @Test void absentEmailIsNotFabricated() throws Exception {
         assertNull(UsCasIdentityProviderFactory.parseProfile(xml("<cas:authenticationSuccess><cas:user>uvus</cas:user></cas:authenticationSuccess>")).email());
     }
+    @Test void acceptsRepeatedOptionalAttributesWithoutChoosingBetweenConflictingEmails() throws Exception {
+        var profile = UsCasIdentityProviderFactory.parseProfile(xml("""
+            <cas:authenticationSuccess>
+                <cas:user>uvus</cas:user>
+                <cas:attributes>
+                    <cas:edupersonaffiliation>member</cas:edupersonaffiliation>
+                    <cas:edupersonaffiliation>student</cas:edupersonaffiliation>
+                    <cas:givenname>Anne</cas:givenname><cas:givenname>Anne</cas:givenname>
+                    <cas:mail>anne@example.org</cas:mail><cas:mail>anne@example.net</cas:mail>
+                </cas:attributes>
+            </cas:authenticationSuccess>
+            """));
+        assertEquals("uvus", profile.id());
+        assertEquals("Anne", profile.firstName());
+        assertNull(profile.email());
+    }
+    @Test void acceptsSimpleXmlTextButRejectsChildElementsInUser() throws Exception {
+        var profile = UsCasIdentityProviderFactory.parseProfile(xml("""
+            <cas:authenticationSuccess><cas:user>
+                <![CDATA[uvus]]>
+            </cas:user></cas:authenticationSuccess>
+            """));
+        assertEquals("uvus", profile.id());
+        assertThrows(IllegalArgumentException.class, () -> UsCasIdentityProviderFactory.parseProfile(xml(
+            "<cas:authenticationSuccess><cas:user><cas:uid>uvus</cas:uid></cas:user></cas:authenticationSuccess>")));
+    }
     @Test void casRejectionReportsOnlyKnownCodes() {
         var known = assertThrows(UsCasIdentityProviderFactory.CasRejection.class,
             () -> UsCasIdentityProviderFactory.parseProfile(xml("<cas:authenticationFailure code='INVALID_SERVICE'>Private CAS detail</cas:authenticationFailure>")));
