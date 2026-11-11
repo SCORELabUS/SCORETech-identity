@@ -24,6 +24,14 @@ class UsCasIdentityProviderTest {
     @Test void absentEmailIsNotFabricated() throws Exception {
         assertNull(UsCasIdentityProviderFactory.parseProfile(xml("<cas:authenticationSuccess><cas:user>uvus</cas:user></cas:authenticationSuccess>")).email());
     }
+    @Test void casRejectionReportsOnlyKnownCodes() {
+        var known = assertThrows(UsCasIdentityProviderFactory.CasRejection.class,
+            () -> UsCasIdentityProviderFactory.parseProfile(xml("<cas:authenticationFailure code='INVALID_SERVICE'>Private CAS detail</cas:authenticationFailure>")));
+        assertEquals("INVALID_SERVICE", known.getMessage());
+        var unknown = assertThrows(UsCasIdentityProviderFactory.CasRejection.class,
+            () -> UsCasIdentityProviderFactory.parseProfile(xml("<cas:authenticationFailure code='provider-specific detail'/>")));
+        assertEquals("UNKNOWN", unknown.getMessage());
+    }
     @Test void rejectsFailuresMalformedOversizedAndAmbiguousResponses() {
         for (var body : new String[] {"<cas:authenticationFailure code='INVALID_TICKET'/>", "<cas:authenticationSuccess/>", "<cas:authenticationSuccess><cas:user>a</cas:user><cas:user>b</cas:user></cas:authenticationSuccess>", "<cas:authenticationSuccess><cas:user>a</cas:user></cas:authenticationSuccess><cas:authenticationFailure/>", "<authenticationSuccess><user>a</user></authenticationSuccess>"})
             assertThrows(Exception.class, () -> UsCasIdentityProviderFactory.parseProfile(xml(body)));
