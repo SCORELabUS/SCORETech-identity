@@ -182,6 +182,19 @@ async function signIn(page, kind, email) {
     .click();
   await page.locator("#email").waitFor();
   await captureAuth(page, "auth-" + kind + "-login", true);
+  if (kind === "account") {
+    const mistypedEmail = `e2e-abandoned-${run}@example.invalid`;
+    await page.locator("#email").fill(mistypedEmail);
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    const sentCode = await code(mistypedEmail, page);
+    await page.locator("#code").fill(sentCode === "000000" ? "000001" : "000000");
+    await expect(page.locator("#otp-error")).toHaveText(
+      "This code is invalid or has expired.",
+    );
+    await page.getByRole("link", { name: "Back to sign in" }).click();
+    await expect(page.locator("#email")).toHaveValue("");
+    mark("Email-code failure can restart the same sign-in with another address.");
+  }
   if (await page.locator("#email").isVisible()) {
     await page.locator("#email").fill(email);
     await page.getByRole("button", { name: "Continue", exact: true }).click();
@@ -358,6 +371,27 @@ try {
     .getByRole("heading", { name: "People power the ecosystem." })
     .waitFor({ timeout: 30000 });
   mark("Administrative OTP + passkey onboarding and prefixed callback passed.");
+  const cancelledPasskey = await browser.newPage();
+  try {
+    await cancelledPasskey.addInitScript(() => {
+      navigator.credentials.get = async () => {
+        throw new DOMException("Cancelled by the browser fixture", "NotAllowedError");
+      };
+    });
+    await cancelledPasskey.goto(origin + "/identity/admin/");
+    await cancelledPasskey
+      .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
+      .click();
+    await cancelledPasskey.locator("#email").fill(adminEmail);
+    await cancelledPasskey.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(cancelledPasskey.locator("#passkey-status")).toContainText("cancelled");
+    await expect(cancelledPasskey.getByRole("button", { name: "Use another sign-in method" })).toHaveCount(0);
+    await cancelledPasskey.getByRole("link", { name: "Back to sign in" }).click();
+    await expect(cancelledPasskey.locator("#email")).toHaveValue("");
+    mark("Cancelled administrative passkey can restart sign-in without offering another factor.");
+  } finally {
+    await cancelledPasskey.close();
+  }
   await expect(
     admin.getByRole("link", { name: "My account", exact: true }),
   ).toHaveCount(0);
