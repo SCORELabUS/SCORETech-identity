@@ -373,3 +373,24 @@ test("production SMTP selects STARTTLS for submission ports and implicit TLS onl
     );
   assert.equal(fetch.mock.callCount(), 0);
 });
+
+test("Brevo API mode renders the sender without SMTP credentials or the API key", async (t) => {
+  const { env, fetch, runtime } = await productionFixture(t);
+  delete env.BREVO_SMTP_LOGIN_FILE;
+  delete env.BREVO_SMTP_KEY_FILE;
+  const { realm } = await renderProduction({
+    ...env,
+    BREVO_EMAIL_TRANSPORT: "api",
+    BREVO_API_KEY: "test-api-key-that-must-not-be-rendered",
+  });
+  assert.deepEqual(realm.smtpServer, {
+    from: env.BREVO_SENDER_EMAIL,
+    fromDisplayName: env.BREVO_SENDER_NAME,
+  });
+  const rendered = await readFile(
+    path.join(runtime, "import/score-realm.json"),
+    "utf8",
+  );
+  assert.ok(!rendered.includes("test-api-key-that-must-not-be-rendered"));
+  assert.equal(fetch.mock.callCount(), 0);
+});
