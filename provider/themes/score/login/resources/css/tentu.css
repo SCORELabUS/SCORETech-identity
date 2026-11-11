@@ -694,6 +694,10 @@ input:disabled {
 .tp-alternate-button {
   font-family: var(--tp-sans);
 }
+.tp-restart-sign-in {
+  display: inline-flex;
+  align-items: center;
+}
 .tp-method-hero {
   display: grid;
   place-items: center;

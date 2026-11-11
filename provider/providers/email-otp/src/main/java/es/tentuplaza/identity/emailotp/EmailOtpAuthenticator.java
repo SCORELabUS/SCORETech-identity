@@ -12,6 +12,7 @@ import java.util.Map;
 import org.keycloak.authentication.AuthenticationFlowContext;
 import org.keycloak.authentication.Authenticator;
 import org.keycloak.email.EmailTemplateProvider;
+import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.models.KeycloakSession;
 import org.keycloak.models.RealmModel;
 import org.keycloak.models.UserModel;
@@ -84,7 +85,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
     if ("methods".equals(stage)) { context.getAuthenticationSession().removeAuthNote(METHOD); challengeMethods(context, null, form.getFirst("currentMethod")); return; }
     if ("select".equals(stage)) { startMethod(context, form.getFirst("method")); return; }
     String method = context.getAuthenticationSession().getAuthNote(METHOD);
-    context.form().setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), context.getUser(), method))
+    signInChallengeForm(context).setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), context.getUser(), method))
         .setAttribute("selectedMethod", method);
     if ("passkey".equals(method) && !"resend".equals(stage)) {
       new org.keycloak.authentication.authenticators.browser.WebAuthnPasswordlessAuthenticator(context.getSession()).action(verifiedContext(context, AuthenticationPolicy.PASSKEY)); return;
@@ -208,7 +209,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
   private void challengeMethods(AuthenticationFlowContext context, String error, String excludeMethod) {
     UserModel user = context.getUser();
     boolean adminPasskey = AuthenticationPolicy.isAdmin(context.getRealm(), user) && AuthenticationPolicy.hasPasskey(user);
-    var form = context.form().setAttribute("stage", "methods")
+    var form = signInChallengeForm(context).setAttribute("stage", "methods")
         .setAttribute("hasPasskey", AuthenticationPolicy.hasPasskey(user) && !"passkey".equals(excludeMethod))
         .setAttribute("hasTotp", !adminPasskey && hasTotp(user) && !"totp".equals(excludeMethod))
         .setAttribute("hasEmail", !adminPasskey && hasEmail(user) && !"email".equals(excludeMethod))
@@ -259,7 +260,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
     if (!"email".equals(method)) clearCode(context);
     context.getAuthenticationSession().setAuthNote(METHOD, method == null ? "" : method);
     boolean adminPasskey = AuthenticationPolicy.isAdmin(context.getRealm(), user) && AuthenticationPolicy.hasPasskey(user);
-    context.form().setAttribute("allowOtherMethods", !adminPasskey && hasOtherMethod(context.getRealm(), user, method));
+    signInChallengeForm(context).setAttribute("allowOtherMethods", !adminPasskey && hasOtherMethod(context.getRealm(), user, method));
     context.form().setAttribute("selectedMethod", method);
     if ("passkey".equals(method) && AuthenticationPolicy.hasPasskey(user)) {
       new org.keycloak.authentication.authenticators.browser.WebAuthnPasswordlessAuthenticator(context.getSession()).authenticate(verifiedContext(context, AuthenticationPolicy.PASSKEY));
@@ -274,7 +275,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
   }
   private void challengeCode(AuthenticationFlowContext context, String error) {
     UserModel user = context.getUser();
-    var form = context.form().setAttribute("stage", "verify")
+    var form = signInChallengeForm(context).setAttribute("stage", "verify")
         .setAttribute("otpCooldownSeconds", EmailOtpRateLimit.cooldown(context))
         .setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), user, "email"))
         .setAttribute("selectedMethod", "email")
@@ -315,7 +316,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
       LOG.warnf("Email OTP delivery failed: exception=%s cause=%s",
           exception.getClass().getSimpleName(), cause.getClass().getSimpleName());
       context.failureChallenge(org.keycloak.authentication.AuthenticationFlowError.INTERNAL_ERROR,
-          context.form().setError("emailOtpDeliveryFailed").createErrorPage(Response.Status.INTERNAL_SERVER_ERROR));
+          signInChallengeForm(context).setError("emailOtpDeliveryFailed").createErrorPage(Response.Status.INTERNAL_SERVER_ERROR));
       return;
     }
     challengeCode(context, null);
@@ -330,7 +331,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
       context.getAuthenticationSession().setAuthNote(ATTEMPTS, Integer.toString(attempts + 1));
       if (attempts >= MAX_ATTEMPTS || Instant.now().getEpochSecond() >= expiresAt) clearCode(context);
       context.failureChallenge(org.keycloak.authentication.AuthenticationFlowError.INVALID_CREDENTIALS,
-          context.form().setAttribute("stage", "verify").setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), context.getUser(), "email")).setAttribute("selectedMethod", "email").setAttribute("email", maskedEmail(identifier(context))).setError("emailOtpInvalidCode").createForm("email-otp.ftl"));
+          signInChallengeForm(context).setAttribute("stage", "verify").setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), context.getUser(), "email")).setAttribute("selectedMethod", "email").setAttribute("email", maskedEmail(identifier(context))).setError("emailOtpInvalidCode").createForm("email-otp.ftl"));
       return;
     }
     if (context.getUser() != null && (!context.getUser().isEnabled() || context.getProtector().isTemporarilyDisabled(context.getSession(), context.getRealm(), context.getUser()))) { challengeCode(context, "emailOtpInvalidCode"); return; }
@@ -354,6 +355,14 @@ public final class EmailOtpAuthenticator implements Authenticator {
         && !"login".equals(auth.getClientNote("prompt"))
         && !"0".equals(auth.getClientNote("max_age"));
   }
+  private LoginFormsProvider signInChallengeForm(AuthenticationFlowContext context) {
+    var auth = context.getAuthenticationSession();
+    return context.form().setAttribute("showSignInRestart",
+        auth.getAuthNote(StepUpResourceFactory.NOTE) == null
+            && auth.getAuthNote(InvitationStore.NOTE) == null
+            && auth.getClientNote("kc_action") == null);
+  }
+
   private void challengeDetails(AuthenticationFlowContext context, String error) {
     var form = context.form().setAttribute("stage", "identify")
         .setAttribute("showRememberMe", context.getRealm().isRememberMe() && normalLogin(context))
@@ -365,7 +374,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
   private void challengeRegistration(AuthenticationFlowContext context, String email) { challengeRegistration(context, email, null); }
   private void challengeRegistration(AuthenticationFlowContext context, String email, String error) {
     LegalDocuments.present(context);
-    var form = context.form().setAttribute("stage", "register").setAttribute("email", email)
+    var form = signInChallengeForm(context).setAttribute("stage", "register").setAttribute("email", email)
         .setAttribute("showRegistrationPrivacyNotice", RegistrationNotice.enabled(context));
     if (error != null) form.setError(error);
     context.challenge(form.createForm("email-otp.ftl"));

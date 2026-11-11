@@ -75,8 +75,18 @@
                         <#nested "form">
                     </div>
                 </div>
-                <#if allowOtherMethods!false>
-                  <form class="tp-alternate-form" action="${url.loginAction}" method="post"><input type="hidden" name="currentMethod" value="${selectedMethod!''}"/><button class="tp-alternate-button" type="submit" name="stage" value="methods">Use another sign-in method</button></form>
+                <#if (allowOtherMethods!false) || (showSignInRestart!false)>
+                    <div class="tp-alternate-form tp-secondary-actions">
+                        <#if allowOtherMethods!false>
+                            <form action="${url.loginAction}" method="post">
+                                <input type="hidden" name="currentMethod" value="${selectedMethod!''}" />
+                                <button class="tp-alternate-button" type="submit" name="stage" value="methods">Use another sign-in method</button>
+                            </form>
+                        </#if>
+                        <#if showSignInRestart!false>
+                            <a class="tp-alternate-button tp-restart-sign-in" href="${url.loginRestartFlowUrl}">${msg("scoreBackToSignIn")}</a>
+                        </#if>
+                    </div>
                 </#if>
                 <#if displayInfo>
                     <aside id="kc-info" class="tp-auth-info">
