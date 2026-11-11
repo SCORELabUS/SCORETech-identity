@@ -5,11 +5,11 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.TimeUnit;
 import javax.xml.XMLConstants;
@@ -18,6 +18,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
+import org.jboss.logging.Logger;
 import org.keycloak.broker.provider.*;
 import org.keycloak.events.EventBuilder;
 import org.keycloak.models.*;
@@ -31,6 +32,7 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
     static final String STATE_NOTE = "score.cas.state";
     static final String SERVICE_NOTE = "score.cas.service";
     static final int MAX_RESPONSE = 65536;
+    private static final Logger LOG = Logger.getLogger(UsCasIdentityProviderFactory.class);
     private static final String CAS_NS = "http://www.yale.edu/tp/cas";
     private static final HttpClient HTTP = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
@@ -72,6 +74,16 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
 
     record Profile(String id, String email, String firstName, String lastName) {}
 
+    static final class CasRejection extends IllegalArgumentException {
+        CasRejection(String code) {
+            super(switch (code) {
+                case "INVALID_REQUEST", "INVALID_TICKET_SPEC", "UNAUTHORIZED_SERVICE",
+                    "INVALID_TICKET", "INVALID_SERVICE", "INTERNAL_ERROR" -> code;
+                default -> "UNKNOWN";
+            });
+        }
+    }
+
     static Profile parseProfile(byte[] xml) throws Exception {
         if (xml.length == 0 || xml.length > MAX_RESPONSE) throw new IllegalArgumentException("Invalid CAS response size");
         var factory = DocumentBuilderFactory.newInstance();
@@ -92,16 +104,18 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
         var doc = builder.parse(new ByteArrayInputStream(xml));
         var root = doc.getDocumentElement();
         if (!CAS_NS.equals(root.getNamespaceURI()) || !"serviceResponse".equals(root.getLocalName())) throw new IllegalArgumentException("Invalid CAS envelope");
-        Element success = null;
+        Element result = null;
         for (var child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (!(child instanceof Element element)) continue;
-            if (!CAS_NS.equals(element.getNamespaceURI()) || !"authenticationSuccess".equals(element.getLocalName()) || success != null)
-                throw new IllegalArgumentException("CAS authentication failed or ambiguous response");
-            success = element;
+            if (!CAS_NS.equals(element.getNamespaceURI()) || result != null)
+                throw new IllegalArgumentException("Ambiguous CAS response");
+            result = element;
         }
-        if (success == null) throw new IllegalArgumentException("CAS authentication failed");
+        if (result == null) throw new IllegalArgumentException("Missing CAS result");
+        if ("authenticationFailure".equals(result.getLocalName())) throw new CasRejection(result.getAttribute("code"));
+        if (!"authenticationSuccess".equals(result.getLocalName())) throw new IllegalArgumentException("Invalid CAS result");
         String id = null; Element attributes = null;
-        for (var child = success.getFirstChild(); child != null; child = child.getNextSibling()) {
+        for (var child = result.getFirstChild(); child != null; child = child.getNextSibling()) {
             if (!(child instanceof Element element) || !CAS_NS.equals(element.getNamespaceURI())) continue;
             if ("user".equals(element.getLocalName())) {
                 if (id != null || element.getChildNodes().getLength() != 1) throw new IllegalArgumentException("Ambiguous CAS identity");
@@ -154,36 +168,52 @@ public final class UsCasIdentityProviderFactory extends AbstractIdentityProvider
             private final Provider provider;
             Endpoint(Provider provider, UserAuthenticationIdentityProvider.AuthenticationCallback callback) { this.provider = provider; this.callback = callback; }
             @GET public Response get(@QueryParam("state") String state, @QueryParam("ticket") String ticket) {
+                String stage = "callback";
                 try {
-                    if (state == null || !state.startsWith(STATE_PREFIX) || state.length() > 8200 || ticket == null || !ticket.matches("ST-[A-Za-z0-9._-]{1,2048}"))
-                        return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    if (state == null || !state.startsWith(STATE_PREFIX) || state.length() > 8200)
+                        return failure(stage, "invalid_state");
+                    if (ticket == null || !ticket.matches("ST-[A-Za-z0-9._-]{1,2048}"))
+                        return failure(stage, ticket == null ? "missing_ticket" : "invalid_ticket_format");
+                    stage = "session";
                     String nativeState = state.substring(STATE_PREFIX.length());
                     AuthenticationSessionModel auth = callback.getAndVerifyAuthenticationSession(nativeState);
-                    if (auth == null || !nativeState.equals(auth.getAuthNote(STATE_NOTE))) return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    if (auth == null) return failure(stage, "missing_session");
+                    if (!nativeState.equals(auth.getAuthNote(STATE_NOTE))) return failure(stage, "state_mismatch");
                     String service = auth.getAuthNote(SERVICE_NOTE);
                     auth.removeAuthNote(STATE_NOTE); auth.removeAuthNote(SERVICE_NOTE);
-                    if (service == null) return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    if (service == null) return failure(stage, "missing_service");
+                    stage = "validation_request";
                     var validation = UriBuilder.fromUri(provider.casUrl() + "/serviceValidate").queryParam("ticket", ticket).queryParam("service", service).build();
                     var request = HttpRequest.newBuilder(validation).timeout(Duration.ofSeconds(10)).header("Accept", "application/xml").GET().build();
                     var pending = HTTP.sendAsync(request, ignored -> new LimitedBody());
                     HttpResponse<byte[]> response;
                     try { response = pending.get(10, TimeUnit.SECONDS); }
                     finally { if (!pending.isDone()) pending.cancel(true); }
-                    if (response.statusCode() != 200) return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    if (response.statusCode() != 200) return failure(stage, "HTTP_" + response.statusCode());
+                    stage = "validation_response";
                     Profile profile = parseProfile(response.body());
+                    stage = "keycloak_broker";
                     var identity = new BrokeredIdentityContext(profile.id(), provider.getConfig());
                     identity.setIdp(provider); identity.setAuthenticationSession(auth);
                     identity.setUsername(profile.id()); identity.setEmail(profile.email());
                     identity.setFirstName(profile.firstName()); identity.setLastName(profile.lastName());
                     identity.setBrokerUserId(provider.getConfig().getAlias() + "." + profile.id());
                     return callback.authenticated(identity);
+                } catch (CasRejection rejection) {
+                    return failure("cas_rejected", rejection.getMessage());
                 } catch (InterruptedException error) {
                     Thread.currentThread().interrupt();
-                    return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    return failure(stage, "interrupted");
                 } catch (Exception error) {
-                    // Never log a CAS ticket, XML attributes or native broker state.
-                    return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
+                    Throwable cause = error instanceof ExecutionException && error.getCause() != null ? error.getCause() : error;
+                    return failure(stage, cause.getClass().getSimpleName());
                 }
+            }
+
+            private Response failure(String stage, String reason) {
+                // Record only fixed labels, HTTP status, standard CAS codes or exception types.
+                LOG.warnf("US CAS sign-in failed: stage=%s reason=%s", stage, reason);
+                return callback.error(provider.getConfig(), "identityProviderUnexpectedErrorMessage");
             }
         }
         @Override public void importNewUser(KeycloakSession session, RealmModel realm, UserModel user, BrokeredIdentityContext identity) {
