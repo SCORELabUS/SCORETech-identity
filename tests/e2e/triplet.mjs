@@ -392,6 +392,21 @@ try {
   } finally {
     await cancelledPasskey.close();
   }
+  await admin.locator('summary[aria-label="Account menu"]').click();
+  await admin.getByRole("button", { name: "Sign out", exact: true }).click();
+  await admin
+    .getByRole("button", { name: "Sign in to SCORETech Identity", exact: true })
+    .click();
+  const passkey = admin.getByRole("button", {
+    name: "Continue with a passkey",
+    exact: true,
+  });
+  await expect(admin.locator("#email")).toHaveValue("");
+  await passkey.press("Enter");
+  await expect(
+    admin.getByRole("heading", { name: "People power the ecosystem." }),
+  ).toBeVisible({ timeout: 30000 });
+  mark("Administrative passkey sign-in without email passed.");
   await expect(
     admin.getByRole("link", { name: "My account", exact: true }),
   ).toHaveCount(0);
@@ -883,6 +898,7 @@ try {
         passed: true,
         checks: [
           "admin-passwordless-passkey",
+          "admin-passkey-sign-in-without-email",
           "role-publication-and-provider-apply",
           "public-email-registration",
           "profile-persistence",

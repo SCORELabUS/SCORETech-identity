@@ -649,6 +649,24 @@ input:disabled {
   text-decoration: none;
 }
 .tp-social-provider span { flex: 1; text-align: center; }
+#kc-content-wrapper .tp-social-passkey {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 20px;
+  min-height: 48px;
+  font-size: 1rem;
+}
+.tp-social-passkey .tp-provider-icon { color: var(--score-link); }
+@media (prefers-color-scheme: dark) {
+  #kc-content-wrapper .tp-social-passkey {
+    border-color: var(--score-control-hover);
+    background: var(--score-panel);
+  }
+  .tp-social-passkey .tp-provider-icon { color: var(--score-text); }
+  #kc-content-wrapper .tp-social-passkey:hover {
+    border-color: var(--score-focus);
+    background: color-mix(in srgb, var(--score-focus) 12%, var(--score-panel));
+  }
+}
 #kc-content-wrapper a.tp-social-google {
   background: #fff;
   color: #1f1f1f;

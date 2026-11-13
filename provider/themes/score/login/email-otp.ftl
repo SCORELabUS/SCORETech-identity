@@ -62,18 +62,32 @@
         <button class="btn-primary tp-registration-submit" type="submit">Create account <span aria-hidden="true">→</span></button>
       </form>
     <#else>
-      <#if social?? && social.providers?has_content>
-        <nav class="tp-social-providers" aria-label="Sign in with another provider">
-          <#list social.providers as provider>
-            <#assign isGoogle = provider.alias == "google" || provider.alias?starts_with("google-")>
-            <#assign isUs = provider.alias == "us-sso">
-            <a class="tp-social-provider cursor-pointer<#if isGoogle> tp-social-google<#elseif isUs> tp-social-us</#if>" id="social-${provider.alias}" href="${provider.loginUrl}">
-              <#if isGoogle><img class="tp-provider-icon" src="${url.resourcesPath}/img/google.svg" width="20" height="20" alt="" aria-hidden="true" />
-              <#elseif isUs><img class="tp-provider-us-logo" src="${url.resourcesPath}/img/universidad-sevilla.png" alt="" aria-hidden="true" /></#if>
-              <span>Continue with ${provider.displayName}</span>
-            </a>
-          </#list>
-        </nav>
+      <#assign hasSocialProviders = social?? && social.providers?has_content>
+      <#if hasSocialProviders || (showDiscoverPasskey!false)>
+        <div class="tp-social-providers" role="group" aria-label="Sign-in options">
+          <#if hasSocialProviders>
+            <#list social.providers as provider>
+              <#assign isGoogle = provider.alias == "google" || provider.alias?starts_with("google-")>
+              <#assign isUs = provider.alias == "us-sso">
+              <a class="tp-social-provider cursor-pointer<#if isGoogle> tp-social-google<#elseif isUs> tp-social-us</#if>" id="social-${provider.alias}" href="${provider.loginUrl}">
+                <#if isGoogle><img class="tp-provider-icon" src="${url.resourcesPath}/img/google.svg" width="20" height="20" alt="" aria-hidden="true" />
+                <#elseif isUs><img class="tp-provider-us-logo" src="${url.resourcesPath}/img/universidad-sevilla.png" alt="" aria-hidden="true" /></#if>
+                <span>Continue with ${provider.displayName}</span>
+              </a>
+            </#list>
+          </#if>
+          <#if showDiscoverPasskey!false>
+            <form action="${url.loginAction}" method="post">
+              <button class="tp-social-provider tp-social-passkey cursor-pointer" type="submit" name="stage" value="discover-passkey">
+                <svg class="tp-provider-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                  <path d="M14.5 3a6.5 6.5 0 0 0-6.1 8.7L3 17v4h4l2-2v-2h2l2.4-2.4A6.5 6.5 0 1 0 14.5 3Z" />
+                  <path d="M16 8h.01" />
+                </svg>
+                <span>Continue with a passkey</span>
+              </button>
+            </form>
+          </#if>
+        </div>
         <div class="tp-social-divider"><span>or continue with email</span></div>
       </#if>
       <form id="kc-email-otp-form" class="tp-auth-flow" action="${url.loginAction}" method="post">
