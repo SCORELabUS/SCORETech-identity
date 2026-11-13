@@ -16,15 +16,20 @@
         </form>
         <#if authenticators??><form id="authn_select"><#list authenticators.authenticators as authenticator><input type="hidden" name="authn_use_chk" value="${authenticator.credentialId}"/></#list></form></#if>
         <p id="passkey-status" class="tp-passkey-status" role="status" aria-live="polite">Waiting for confirmation from your device…</p>
-        <button id="retryWebAuthnButton" type="button" class="tp-passkey-button" hidden>Try your passkey again <span aria-hidden="true">↻</span></button>
+        <button id="retryWebAuthnButton" type="button" class="tp-passkey-button cursor-pointer" hidden>Try your passkey again <span aria-hidden="true">↻</span></button>
+        <#if discoverPasskey!false>
+          <form action="${url.loginAction}" method="post">
+            <button class="tp-alternate-button cursor-pointer" type="submit" name="stage" value="back-to-sign-in">Back to sign-in options</button>
+          </form>
+        </#if>
       </div>
       <p class="tp-passkey-hint">Your browser will open a secure prompt. Your biometric data stays on your device.</p>
     </div>
     <script type="module">
       <#outputformat "JavaScript">
-      import { doAuthenticate, returnSuccess } from "${url.resourcesPath}/js/webauthnAuthenticate.js";
+      import { doAuthenticate, getAllowCredentials, returnSuccess } from "${url.resourcesPath}/js/webauthnAuthenticate.js";
       import { startPasskeyPrompt } from "${url.resourcesPath}/js/passkeyPrompt.js?v=${properties.tentuThemeVersion!'0'}";
-      const input = { isUserIdentified: ${isUserIdentified}, challenge: ${challenge?c}, userVerification: ${userVerification?c}, rpId: ${rpId?c}, createTimeout: ${createTimeout?c}, errmsg: ${msg("webauthn-unsupported-browser-text")?c} };
+      const input = { allowCredentials: ${isUserIdentified} ? getAllowCredentials() : [], challenge: ${challenge?c}, userVerification: ${userVerification?c}, rpId: ${rpId?c}, createTimeout: ${createTimeout?c}, errmsg: ${msg("webauthn-unsupported-browser-text")?c} };
       startPasskeyPrompt(input, { authenticate: doAuthenticate, submit: returnSuccess });
       </#outputformat>
     </script>

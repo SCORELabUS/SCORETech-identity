@@ -9,8 +9,12 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.keycloak.WebAuthnConstants;
 import org.keycloak.authentication.AuthenticationFlowContext;
+import org.keycloak.authentication.AuthenticationFlowError;
+import org.keycloak.authentication.AuthenticationFlowException;
 import org.keycloak.authentication.Authenticator;
+import org.keycloak.authentication.authenticators.browser.WebAuthnPasswordlessAuthenticator;
 import org.keycloak.email.EmailTemplateProvider;
 import org.keycloak.forms.login.LoginFormsProvider;
 import org.keycloak.models.KeycloakSession;
@@ -28,6 +32,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
   private static final String CODE_HASH = "tentu.email_otp.hash";
   private static final String EXPIRES_AT = "tentu.email_otp.expires_at";
   private static final String METHOD = "tentu.selected_method";
+  private static final String DISCOVER_PASSKEY = "discover-passkey";
   private static final String ATTEMPTS = "tentu.email_otp.attempts";
 
   @Override public void authenticate(AuthenticationFlowContext context) {
@@ -82,13 +87,35 @@ public final class EmailOtpAuthenticator implements Authenticator {
     recordDevice(context);
     MultivaluedMap<String, String> form = context.getHttpRequest().getDecodedFormParameters();
     String stage = form.getFirst("stage");
+    var auth = context.getAuthenticationSession();
+    if (DISCOVER_PASSKEY.equals(auth.getAuthNote(METHOD))) {
+      if ("back-to-sign-in".equals(stage)) {
+        context.clearUser();
+        auth.removeAuthNote(METHOD);
+        auth.removeAuthNote(WebAuthnConstants.AUTH_CHALLENGE_NOTE);
+        challengeDetails(context, null);
+      } else {
+        verifyDiscoverablePasskey(context, form);
+      }
+      return;
+    }
+    if (DISCOVER_PASSKEY.equals(stage) && canDiscoverPasskey(context)) {
+      clearCode(context);
+      auth.removeAuthNote("tentu.identifier");
+      auth.removeAuthNote("tentu.registration_verified");
+      auth.removeAuthNote(org.keycloak.events.Details.REMEMBER_ME);
+      auth.setAuthNote(METHOD, DISCOVER_PASSKEY);
+      context.form().setAttribute("discoverPasskey", true);
+      new WebAuthnPasswordlessAuthenticator(context.getSession()).authenticate(context);
+      return;
+    }
     if ("methods".equals(stage)) { context.getAuthenticationSession().removeAuthNote(METHOD); challengeMethods(context, null, form.getFirst("currentMethod")); return; }
     if ("select".equals(stage)) { startMethod(context, form.getFirst("method")); return; }
     String method = context.getAuthenticationSession().getAuthNote(METHOD);
     signInChallengeForm(context).setAttribute("allowOtherMethods", hasOtherMethod(context.getRealm(), context.getUser(), method))
         .setAttribute("selectedMethod", method);
     if ("passkey".equals(method) && !"resend".equals(stage)) {
-      new org.keycloak.authentication.authenticators.browser.WebAuthnPasswordlessAuthenticator(context.getSession()).action(verifiedContext(context, AuthenticationPolicy.PASSKEY)); return;
+      new WebAuthnPasswordlessAuthenticator(context.getSession()).action(verifiedContext(context, AuthenticationPolicy.PASSKEY)); return;
     }
     if ("totp".equals(method)) {
       new org.keycloak.authentication.authenticators.browser.OTPFormAuthenticator().action(verifiedContext(context, "otp")); return;
@@ -98,6 +125,34 @@ public final class EmailOtpAuthenticator implements Authenticator {
     if ("register".equals(stage)) { register(context, form); return; }
     if(context.getAuthenticationSession().getAuthNote(StepUpResourceFactory.NOTE)!=null) { challengeMethods(context,null); return; }
     identify(context, form);
+  }
+
+  private static boolean canDiscoverPasskey(AuthenticationFlowContext context) {
+    var auth = context.getAuthenticationSession();
+    return context.getUser() == null
+        && auth.getAuthNote(InvitationStore.NOTE) == null
+        && auth.getAuthNote(StepUpResourceFactory.NOTE) == null;
+  }
+
+  private void verifyDiscoverablePasskey(AuthenticationFlowContext context, MultivaluedMap<String, String> form) {
+    if (trim(form.getFirst(WebAuthnConstants.USER_HANDLE)).isEmpty() || form.containsKey("username") || form.containsKey("rememberMe")) {
+      throw new AuthenticationFlowException(AuthenticationFlowError.INVALID_CREDENTIALS);
+    }
+    var verified = verifiedContext(context, AuthenticationPolicy.PASSKEY);
+    // Keycloak resolves the account and validates its assertion before calling setUser.
+    var guarded = AuthenticationPolicy.observe(AuthenticationFlowContext.class, verified, (name, args) -> {
+      if (name.equals("setUser")) {
+        var user = (UserModel) args[0];
+        if ("true".equals(user.getFirstAttribute(InvitationStore.PROVISIONAL))
+            || context.getProtector().isTemporarilyDisabled(context.getSession(), context.getRealm(), user)) {
+          throw new AuthenticationFlowException(AuthenticationFlowError.INVALID_USER);
+        }
+        if (!normalLogin(context) && user.getId().equals(context.getAuthenticationSession().getAuthNote("tentu.remember.previous_user"))) {
+          context.getAuthenticationSession().setAuthNote(org.keycloak.events.Details.REMEMBER_ME, "true");
+        }
+      }
+    });
+    new WebAuthnPasswordlessAuthenticator(context.getSession()).action(guarded);
   }
 
   private void identify(AuthenticationFlowContext context, MultivaluedMap<String, String> form) {
@@ -263,7 +318,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
     signInChallengeForm(context).setAttribute("allowOtherMethods", !adminPasskey && hasOtherMethod(context.getRealm(), user, method));
     context.form().setAttribute("selectedMethod", method);
     if ("passkey".equals(method) && AuthenticationPolicy.hasPasskey(user)) {
-      new org.keycloak.authentication.authenticators.browser.WebAuthnPasswordlessAuthenticator(context.getSession()).authenticate(verifiedContext(context, AuthenticationPolicy.PASSKEY));
+      new WebAuthnPasswordlessAuthenticator(context.getSession()).authenticate(verifiedContext(context, AuthenticationPolicy.PASSKEY));
     } else if ("totp".equals(method) && user.credentialManager().isConfiguredFor("otp")) {
       new org.keycloak.authentication.authenticators.browser.OTPFormAuthenticator().authenticate(verifiedContext(context, "otp"));
     } else if ("email".equals(method)) { sendCode(context, user, user.getEmail(), false); }
@@ -365,6 +420,7 @@ public final class EmailOtpAuthenticator implements Authenticator {
 
   private void challengeDetails(AuthenticationFlowContext context, String error) {
     var form = context.form().setAttribute("stage", "identify")
+        .setAttribute("showDiscoverPasskey", canDiscoverPasskey(context))
         .setAttribute("showRememberMe", context.getRealm().isRememberMe() && normalLogin(context))
         .setAttribute("rememberMeChecked", "true".equals(context.getAuthenticationSession().getAuthNote(org.keycloak.events.Details.REMEMBER_ME)));
     if (error != null) form.setError(error);

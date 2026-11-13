@@ -90,6 +90,13 @@ try {
   const context = await browser.newContext();
   page = await context.newPage();
   page.setDefaultTimeout(30000);
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem("cancelPasskey") === "true") {
+      navigator.credentials.get = async () => {
+        throw new DOMException("Passkey picker cancelled", "NotAllowedError");
+      };
+    }
+  });
   await page.goto("http://localhost:18000/identity/account/");
   await page.getByRole("button", { name: /Sign in/ }).click();
   const googleLink = page.getByRole("link", {
@@ -101,6 +108,11 @@ try {
     "color",
     "rgb(255, 255, 255)",
   );
+  const passkeyButton = page.getByRole("button", {
+    name: "Continue with a passkey",
+    exact: true,
+  });
+  await expect(passkeyButton).toBeVisible();
   await mkdir(root + "test-results/external-sso", { recursive: true });
   await page.emulateMedia({ colorScheme: "dark" });
   await page.screenshot({
@@ -109,6 +121,7 @@ try {
     path: root + "test-results/external-sso/login-providers-dark.png",
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await expect(passkeyButton).toBeInViewport();
   assert.ok(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -121,6 +134,13 @@ try {
   });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.emulateMedia({ colorScheme: "light" });
+  await page.evaluate(() => sessionStorage.setItem("cancelPasskey", "true"));
+  await passkeyButton.click();
+  await expect(page.locator("#retryWebAuthnButton")).toBeVisible();
+  await page.getByRole("button", { name: "Back to sign-in options" }).click();
+  await expect(page.locator("#email")).toBeEditable();
+  await expect(googleLink).toBeVisible();
+  await page.evaluate(() => sessionStorage.removeItem("cancelPasskey"));
   const googleResponse = await page.request.get(
     new URL(await googleLink.getAttribute("href"), page.url()).href,
     { maxRedirects: 0 },
