@@ -240,6 +240,30 @@
   width: 100%;
 }
 
+.application-user-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+
+.application-user-fields fieldset {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 12px;
+}
+
+/* Keep the four network checkboxes together on both wide and narrow forms. */
+.application-user-fields fieldset:last-child {
+  grid-column: 1 / -1;
+}
+
+.application-user-fields fieldset:last-child .application-user-field-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  column-gap: 16px;
+}
+
 .applications-checkbox-list {
   max-height: 260px;
   overflow-y: auto;

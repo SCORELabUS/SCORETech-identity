@@ -680,12 +680,21 @@ country, date of birth and LinkedIn/Instagram/Facebook/X profile links. These ar
 stored as allowlisted `scoreProfile` and `scoreSocialLinks` user attributes through
 the provider's existing atomic field patch. Updating either group leaves contact
 data, roles, consent, credentials and the other group intact. Supplying an empty
-group clears its optional values. The Account API returns these data only to their owner. A trusted OIDC client
-that uses the authentication-policy mapper can opt in to the display name by
-setting the Keycloak client attribute `scoretech.shared-display-name` to
-`"true"` and using the `profile` scope. The mapper sends only
-`scoretech_display_name` in the ID token on issuance and renewal. The other
-shared profile fields remain outside tokens. SPHERE's `docker/migrate-scoretech-users --profiles` command can
+group clears its optional values. The Account API returns these data only to their owner. For a trusted managed
+OIDC client, an Identity administrator can select individual fields in
+**Applications → Edit → User data shared with this application**. New applications
+created in the panel start with no optional fields. Existing clients keep their
+standard OIDC behavior until an administrator saves a selection. Leaving all
+fields unchecked shares only the account identifier and protocol data.
+Selected fields reach new ID tokens (including renewals) and UserInfo with the
+`email` or `profile` scope. An explicit selection keeps personal fields out of
+access tokens and introspection. Already issued tokens retain their original
+contents until expiry. The panel lists the claim for each field, including
+`scoretech_display_name` and the individual `scoretech_social_links` entries.
+Avatar designs contain presentation metadata; uploaded photos and their storage
+references remain private. Credentials and internal attributes are outside the
+selection. An unmanaged client using the legacy `scoretech.shared-display-name`
+attribute retains its existing behavior. SPHERE's `docker/migrate-scoretech-users --profiles` command can
 backfill these groups, phone and avatar from already-linked SPHERE accounts.
 It uses the existing identity binding and only fills missing groups. Deploy
 the provider and Account API with profile import support before running it.

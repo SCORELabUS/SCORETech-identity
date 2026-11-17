@@ -41,6 +41,7 @@ interface Application {
   postLogoutRedirectUris: string[];
   requiredPermissions: string[];
   enabled: boolean;
+  sharedUserFields?: string[];
   version: string;
 }
 interface ApplicationsResponse {
@@ -67,6 +68,47 @@ interface NewSecret {
   name: string;
   value: string;
 }
+const userFieldGroups = [
+  {
+    label: "Account and contact",
+    fields: [
+      ["email", "Email address", "email, email_verified"],
+      [
+        "preferred_username",
+        "Username",
+        "preferred_username · without the email domain",
+      ],
+      ["name", "Full name", "name"],
+      ["given_name", "First name", "given_name"],
+      ["family_name", "Last name", "family_name"],
+      ["phone_number", "Phone number", "phone_number"],
+    ],
+  },
+  {
+    label: "Profile",
+    fields: [
+      ["display_name", "Display name", "scoretech_display_name"],
+      ["bio", "Bio", "scoretech_bio"],
+      ["city", "City", "scoretech_city"],
+      ["country", "Country", "scoretech_country"],
+      ["birthdate", "Date of birth", "birthdate"],
+      [
+        "avatar",
+        "Avatar design",
+        "scoretech_avatar · uploaded photos are excluded",
+      ],
+    ],
+  },
+  {
+    label: "Social links",
+    fields: [
+      ["linkedin", "LinkedIn", "scoretech_social_links.linkedin"],
+      ["instagram", "Instagram", "scoretech_social_links.instagram"],
+      ["facebook", "Facebook", "scoretech_social_links.facebook"],
+      ["x", "X / Twitter", "scoretech_social_links.x"],
+    ],
+  },
+] as const;
 const endpoint = config.adminApiUrl + "/applications";
 const applicationUrl = (clientId: string) =>
   endpoint + "/" + encodeURIComponent(clientId);
@@ -537,6 +579,9 @@ function ApplicationForm({
     application?.requiredPermissions ?? [],
   );
   const [enabled, setEnabled] = useState(application?.enabled ?? true);
+  const [sharedUserFields, setSharedUserFields] = useState<string[]>(
+    application?.sharedUserFields ?? [],
+  );
   const [filter, setFilter] = useState("");
   const [error, setError] = useState("");
   const visible = permissions.filter((permission) =>
@@ -590,6 +635,7 @@ function ApplicationForm({
             postLogoutRedirectUris,
             requiredPermissions: required,
             enabled,
+            sharedUserFields,
             ...(application ? { version: application.version } : {}),
           }),
         },
@@ -699,6 +745,49 @@ function ApplicationForm({
             onChange={(event) => setLogouts(event.target.value)}
           />
         </Field>
+        <fieldset className="applications-permission-picker">
+          <legend>User data shared with this application</legend>
+          <p>
+            Select the fields this application needs in its ID token and
+            UserInfo. The account identifier is always included.
+          </p>
+          <div className="application-user-fields">
+            {userFieldGroups.map(({ label, fields }) => (
+              <fieldset key={label}>
+                <legend>{label}</legend>
+                <div className="application-user-field-options">
+                  {fields.map(([id, name, claim]) => (
+                    <label
+                      className="applications-permission-checkbox cursor-pointer"
+                      key={id}
+                    >
+                      <input
+                        className="cursor-pointer"
+                        type="checkbox"
+                        checked={sharedUserFields.includes(id)}
+                        disabled={task.busy}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setSharedUserFields((current) =>
+                            checked
+                              ? [...current, id]
+                              : current.filter((field) => field !== id),
+                          );
+                        }}
+                      />
+                      <span>
+                        <strong>{name}</strong>
+                        <span>
+                          <code>{claim}</code>
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))}
+          </div>
+        </fieldset>
         <fieldset className="applications-permission-picker">
           <legend>
             Required permissions<span aria-hidden="true"> *</span>
@@ -929,6 +1018,16 @@ function ApplicationDetails({
             : "Keep the client secret on the backend. Use Show secret above to view its current value; rotating replaces it."}
         </p>
       </div>
+      <p className="applications-setup-permissions">
+        Shared user data:{" "}
+        {userFieldGroups
+          .flatMap(({ fields }) =>
+            fields
+              .filter(([id]) => application.sharedUserFields?.includes(id))
+              .map(([, name]) => name),
+          )
+          .join(", ") || "No optional fields"}
+      </p>
       <p className="applications-setup-permissions">
         Required permissions:{" "}
         {application.requiredPermissions.map((permission) => (

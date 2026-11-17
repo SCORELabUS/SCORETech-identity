@@ -132,13 +132,18 @@ export async function verifyApplications({
       200,
       "A registered application could not exchange a real PKCE code.",
     );
-    let verified;
+    const jwks = createRemoteJWKSet(
+      new URL(issuer + "/protocol/openid-connect/certs"),
+    );
+    const validation = {
+      issuer,
+      audience: application.clientId,
+      algorithms: ["RS256"],
+    };
+    let verified, idToken;
     try {
-      verified = await jwtVerify(
-        response.data.access_token,
-        createRemoteJWKSet(new URL(issuer + "/protocol/openid-connect/certs")),
-        { issuer, audience: application.clientId, algorithms: ["RS256"] },
-      );
+      verified = await jwtVerify(response.data.access_token, jwks, validation);
+      idToken = await jwtVerify(response.data.id_token, jwks, validation);
     } catch {
       throw new Error(
         "The registered application's signed JWT failed verification.",
@@ -148,6 +153,15 @@ export async function verifyApplications({
       verified.payload.realm_access?.roles,
       [permission],
       "Application tokens must contain only the selected service permission.",
+    );
+    assert.equal(
+      Object.hasOwn(idToken.payload, "scoretech_display_name"),
+      application.sharedUserFields.includes("display_name"),
+      "The ID token must reflect the application's explicit profile sharing setting.",
+    );
+    assert.equal(
+      Object.hasOwn(verified.payload, "scoretech_display_name"),
+      false,
     );
     assert.equal(typeof response.data.refresh_token, "string");
     return response.data;
@@ -185,6 +199,15 @@ export async function verifyApplications({
       .getByLabel("Filter application permissions", { exact: true })
       .fill(permission);
     await dialog.getByLabel(permission, { exact: false }).check();
+    const displayName = dialog.getByRole("checkbox", { name: /^Display name/ });
+    const email = dialog.getByRole("checkbox", { name: /^Email address/ });
+    assert.equal(await displayName.isChecked(), false);
+    assert.equal(await email.isChecked(), false);
+    const sharesProfile = kind === "public" && suffix === "";
+    if (sharesProfile) {
+      await displayName.check();
+      await email.check();
+    }
     const pending = admin.waitForResponse(
       (r) =>
         r.url().endsWith("/applications") && r.request().method() === "POST",
@@ -200,6 +223,10 @@ export async function verifyApplications({
     );
     const result = await response.json();
     assert.equal(result.application.name, name);
+    assert.deepEqual(
+      result.application.sharedUserFields,
+      sharesProfile ? ["display_name", "email"] : [],
+    );
     assert.deepEqual(
       result.application.postLogoutRedirectUris,
       kind === "public" ? [origin + "/identity/account/"] : [],

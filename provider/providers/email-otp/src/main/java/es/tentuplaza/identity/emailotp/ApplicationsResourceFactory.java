@@ -44,6 +44,7 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
     public List<String> postLogoutRedirectUris;
     public List<String> requiredPermissions;
     public boolean enabled;
+    public List<String> sharedUserFields;
     public String version;
   }
 
@@ -112,10 +113,12 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
   }
 
   static Configuration validate(Map<String, Object> input, AuthorizationResourceFactory.Registry registry, boolean update) {
-    var allowed = new HashSet<>(FIELDS);
-    if (update) allowed.add("version");
-    if (input == null || !allowed.equals(input.keySet()) || registry == null || registry.permissions == null
-        || !(input.get("enabled") instanceof Boolean))
+    var required = new HashSet<>(FIELDS);
+    if (update) required.add("version");
+    var allowed = new HashSet<>(required);
+    allowed.add("sharedUserFields");
+    if (input == null || !input.keySet().containsAll(required) || !allowed.containsAll(input.keySet())
+        || registry == null || registry.permissions == null || !(input.get("enabled") instanceof Boolean))
       throw new BadRequestException("Provide only the complete application configuration and its current version when updating.");
     var value = new Configuration();
     value.name = text(input, "name", 150);
@@ -126,6 +129,8 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
     value.postLogoutRedirectUris = strings(input, "postLogoutRedirectUris", 0, 10);
     value.requiredPermissions = strings(input, "requiredPermissions", 1, 1000);
     value.enabled = (Boolean) input.get("enabled");
+    if (input.containsKey("sharedUserFields"))
+      value.sharedUserFields = ApplicationUserClaims.validate(input.get("sharedUserFields"));
     value.version = update ? version(input) : null;
     for (String permission : value.requiredPermissions) {
       String namespace = permission.split(":", 2)[0].toLowerCase(Locale.ROOT);
@@ -236,6 +241,19 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
     var value = configuration(client, registry);
     actual(client, value, client.getRealm());
     var result = configurationMap(value); result.put("clientId", client.getClientId());
+    var fields = ApplicationUserClaims.configured(client);
+    if (fields == null) {
+      // Existing clients retain standard scope behavior until an administrator saves a selection.
+      var defaults = client.getClientScopes(true).values().stream().map(ClientScopeModel::getName).toList();
+      fields = new ArrayList<>();
+      if (defaults.contains("email")) fields.add("email");
+      if (defaults.contains("profile")) {
+        fields.addAll(List.of("name", "given_name", "family_name", "preferred_username"));
+        if ("true".equals(client.getAttribute(ApplicationUserClaims.LEGACY_DISPLAY_NAME))) fields.add("display_name");
+      }
+      fields.sort(Comparator.naturalOrder());
+    }
+    result.put("sharedUserFields", fields);
     return result;
   }
 
@@ -258,6 +276,9 @@ public final class ApplicationsResourceFactory implements RealmResourceProviderF
     client.setRedirectUris(new HashSet<>(value.redirectUris)); client.setWebOrigins(Set.of(value.origin));
     client.setAttribute(LOGOUT, String.join("##", value.postLogoutRedirectUris));
     client.setAttribute("pkce.code.challenge.method", "S256");
+    if (value.sharedUserFields != null) {
+      client.setAttribute(ApplicationUserClaims.ATTRIBUTE, AuthorizationResourceFactory.serialize(value.sharedUserFields));
+    }
     for (boolean defaults : List.of(true, false))
       for (var scope : client.getClientScopes(defaults).values().stream().toList()) client.removeClientScope(scope);
     for (var scope : realm.getClientScopesStream().filter(scope -> OIDC.equals(scope.getProtocol()) && Set.of("profile", "email").contains(scope.getName())).toList())

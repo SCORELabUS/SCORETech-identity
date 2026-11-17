@@ -146,7 +146,7 @@ class ApplicationsResourceFactoryTest {
         Map.of("redirectUris", List.of("https://analytics.score.us.es.evil/callback")), Map.of("redirectUris", List.of(ORIGIN + "/*")),
         Map.of("redirectUris", List.of(ORIGIN + "/callback#fragment")), Map.of("redirectUris", List.of("https://user@analytics.score.us.es/callback")),
         Map.of("postLogoutRedirectUris", List.of("https://other.score.us.es/out")), Map.of("redirectUris", List.of()),
-        Map.of("redirectUris", Collections.nCopies(11, ORIGIN + "/callback")), Map.of("kind", "machine"),
+        Map.of("redirectUris", Collections.nCopies(11, ORIGIN + "/callback")), Map.of("kind", "machine"), Map.of("sharedUserFields", List.of("password")), Map.of("sharedUserFields", List.of("email", "email")),
         Map.of("requiredPermissions", List.of()), Map.of("requiredPermissions", List.of("identity:roles:manage")),
         Map.of("requiredPermissions", List.of("admin-web:local:access")), Map.of("requiredPermissions", List.of(ATOM, ATOM)),
         Map.of("requiredPermissions", List.of("unknown:admin")), Map.of("clientSecret", "injected"), Map.of("version", UUID.randomUUID().toString()))) {
@@ -207,6 +207,31 @@ class ApplicationsResourceFactoryTest {
     assertEquals(1, ((List<?>) ((Map<?, ?>) listed.getEntity()).get("applications")).size());
     verify(client.client, never()).getSecret();
     assertThrows(ClientErrorException.class, () -> f.resource.rotate((String) view.get("clientId"), Map.of("version", view.get("version"))));
+  }
+
+  @Test void userFieldSelectionIsPerClientAndOmittedUpdatesPreserveExistingSettings() {
+    var f = new Fixture();
+    var target = f.create("public"); var other = f.create("public");
+    var targetId = (String) target.get("clientId");
+    assertEquals(List.of(), target.get("sharedUserFields"));
+    assertEquals(List.of(), other.get("sharedUserFields"));
+
+    var enable = f.update(target);
+    enable.put("sharedUserFields", List.of("email", "display_name"));
+    var enabled = f.application(f.resource.update(targetId, enable));
+    assertEquals(List.of("display_name", "email"), enabled.get("sharedUserFields"));
+    assertEquals(List.of("display_name", "email"), ApplicationUserClaims.configured(f.nativeClient(enabled).client));
+    assertNull(ApplicationUserClaims.configured(f.nativeClient(other).client));
+
+    var legacyEdit = f.update(enabled);
+    legacyEdit.remove("sharedUserFields");
+    var preserved = f.application(f.resource.update(targetId, legacyEdit));
+    assertEquals(List.of("display_name", "email"), preserved.get("sharedUserFields"));
+
+    var disable = f.update(preserved);
+    disable.put("sharedUserFields", List.of());
+    assertEquals(List.of(), f.application(f.resource.update(targetId, disable)).get("sharedUserFields"));
+    assertEquals(List.of(), ApplicationUserClaims.configured(f.nativeClient(enabled).client));
   }
 
   @Test void updateRequiresCurrentVersionAndChangesOnlyOwnedClient() {
