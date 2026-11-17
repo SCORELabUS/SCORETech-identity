@@ -680,10 +680,12 @@ country, date of birth and LinkedIn/Instagram/Facebook/X profile links. These ar
 stored as allowlisted `scoreProfile` and `scoreSocialLinks` user attributes through
 the provider's existing atomic field patch. Updating either group leaves contact
 data, roles, consent, credentials and the other group intact. Supplying an empty
-group clears its optional values. Profile data is only returned to its owner;
-this feature does not create a public directory or add optional personal data to
-tokens. Each service integration defines the data it consumes and its public
-visibility. SPHERE's `docker/migrate-scoretech-users --profiles` command can
+group clears its optional values. The Account API returns these data only to their owner. A trusted OIDC client
+that uses the authentication-policy mapper can opt in to the display name by
+setting the Keycloak client attribute `scoretech.shared-display-name` to
+`"true"` and using the `profile` scope. The mapper sends only
+`scoretech_display_name` in the ID token on issuance and renewal. The other
+shared profile fields remain outside tokens. SPHERE's `docker/migrate-scoretech-users --profiles` command can
 backfill these groups, phone and avatar from already-linked SPHERE accounts.
 It uses the existing identity binding and only fills missing groups. Deploy
 the provider and Account API with profile import support before running it.
