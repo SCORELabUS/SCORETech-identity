@@ -1,54 +1,46 @@
 package es.tentuplaza.identity.emailotp;
 
-import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import org.keycloak.models.*;
 import org.keycloak.protocol.oidc.mappers.*;
 import org.keycloak.provider.ProviderConfigProperty;
 import org.keycloak.representations.IDToken;
-import org.keycloak.util.JsonSerialization;
+import org.keycloak.representations.AccessToken;
 
 /** Executed on issuance AND refresh, checking current effective roles and credentials. */
-public final class AuthenticationPolicyMapper extends AbstractOIDCProtocolMapper implements OIDCAccessTokenMapper, OIDCIDTokenMapper, TokenIntrospectionTokenMapper {
+public final class AuthenticationPolicyMapper extends AbstractOIDCProtocolMapper implements OIDCAccessTokenMapper, OIDCIDTokenMapper, TokenIntrospectionTokenMapper, UserInfoTokenMapper {
+
+  // Run after standard scope mappers so they cannot reintroduce unselected fields.
+  @Override public int getPriority() { return Integer.MAX_VALUE; }
 
   public String getId() { return "tentu-authentication-policy"; }
   public String getDisplayType() { return "SCORE authentication policy"; }
   public String getDisplayCategory() { return "Token mapper"; }
   public String getHelpText() { return "Rejects administrative tokens without server-attested passwordless authentication."; }
   public List<ProviderConfigProperty> getConfigProperties() { return List.of(); }
-  @Override public org.keycloak.representations.AccessToken transformAccessToken(org.keycloak.representations.AccessToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
-    setClaim(token, model, userSession, session, client); return token;
-  }
-  @Override public IDToken transformIDToken(IDToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
+  @Override public AccessToken transformAccessToken(AccessToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
     setClaim(token, model, userSession, session, client);
-    var clientSession = client == null ? null : client.getClientSession();
-    if (clientSession != null && userSession.getUser().getServiceAccountClientLink() == null
-        && "true".equals(clientSession.getClient().getAttribute("scoretech.shared-display-name"))
-        && client.getClientScopesStream().anyMatch(scope -> "profile".equals(scope.getName()))) {
-      token.getOtherClaims().put("scoretech_display_name", sharedDisplayName(userSession.getUser()));
-    }
+    ApplicationUserClaims.apply(token, userSession.getUser(), client, false, false);
     return token;
   }
 
-  private static String sharedDisplayName(UserModel user) {
-    String raw = user.getFirstAttribute("scoreProfile");
-    if (raw == null || raw.isBlank()) return "";
-    try {
-      var profile = JsonSerialization.readValue(raw, Map.class);
-      if (profile != null && profile.get("displayName") instanceof String value) {
-        String name = value.strip();
-        if (name.length() <= 100) return name;
-      }
-    } catch (IOException ignored) {
-      // Invalid legacy profile data must not prevent sign-in.
-    }
-    return "";
+  @Override public IDToken transformIDToken(IDToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
+    setClaim(token, model, userSession, session, client);
+    ApplicationUserClaims.apply(token, userSession.getUser(), client, true, true);
+    return token;
   }
 
-  @Override public org.keycloak.representations.AccessToken transformIntrospectionToken(org.keycloak.representations.AccessToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
-    setClaim(token, model, userSession, session, client); return token;
+  @Override public AccessToken transformUserInfoToken(AccessToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
+    ApplicationUserClaims.apply(token, userSession.getUser(), client, true, false);
+    return token;
   }
+
+  @Override public AccessToken transformIntrospectionToken(AccessToken token, ProtocolMapperModel model, KeycloakSession session, UserSessionModel userSession, ClientSessionContext client) {
+    setClaim(token, model, userSession, session, client);
+    ApplicationUserClaims.apply(token, userSession.getUser(), client, false, false);
+    return token;
+  }
+
   @Override protected void setClaim(IDToken token, ProtocolMapperModel model, UserSessionModel userSession, KeycloakSession session, ClientSessionContext client) {
     var user = userSession.getUser();
     // Service accounts retain their narrowly scoped machine credentials.

@@ -208,6 +208,49 @@ describe('managed applications authorization', () => {
   });
 });
 
+describe('application profile sharing', () => {
+  it.each([['email', 'display_name'], []].map((fields) => [fields]))(
+    'verifies the selected fields without depending on wire order (%j)',
+    async (sharedUserFields) => {
+      const f = await fixture({
+        response: {
+          application: application({
+            version: nextVersion,
+            sharedUserFields: [...sharedUserFields].reverse(),
+          }),
+        },
+      });
+      const body = { ...settings({ sharedUserFields }), version };
+      const response = await f.request('/' + clientId, 'PUT', body);
+      expect(response.status).toBe(200);
+      expect(f.providerCalls[0]?.body).toEqual(body);
+    },
+  );
+
+  it.each([['password'], ['email', 'email']].map((fields) => [fields]))(
+    'rejects unsupported or duplicate fields (%j)',
+    async (sharedUserFields) => {
+      const f = await fixture();
+      expect(
+        (await f.request('/' + clientId, 'PUT', { ...settings({ sharedUserFields }), version }))
+          .status,
+      ).toBe(400);
+      expect(f.providerCalls).toEqual([]);
+    },
+  );
+
+  it('rejects a provider response that does not confirm the selected fields', async () => {
+    const f = await fixture({
+      response: { application: application({ sharedUserFields: ['email'] }) },
+    });
+    const response = await f.request('/' + clientId, 'PUT', {
+      ...settings({ sharedUserFields: [] }),
+      version,
+    });
+    expect(response.status).toBe(502);
+  });
+});
+
 describe('managed application deletion', () => {
   it('forwards only the current UUID version with DELETE and projects an ID-bound confirmation', async () => {
     const f = await fixture({

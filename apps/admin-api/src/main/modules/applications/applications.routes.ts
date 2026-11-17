@@ -17,6 +17,38 @@ const Permission = z
     (name) => !/^(identity|admin-web|account-web):/.test(name),
     'Select an application permission.',
   );
+const UserField = z.enum([
+  'email',
+  'preferred_username',
+  'name',
+  'given_name',
+  'family_name',
+  'display_name',
+  'phone_number',
+  'birthdate',
+  'bio',
+  'city',
+  'country',
+  'avatar',
+  'linkedin',
+  'instagram',
+  'facebook',
+  'x',
+]);
+const SharedUserFields = z
+  .array(UserField)
+  .max(UserField.options.length)
+  .refine((fields) => new Set(fields).size === fields.length, 'Choose each user field only once.');
+
+function confirmsUserFields(requested?: string[], returned?: string[]) {
+  return (
+    requested === undefined ||
+    (returned !== undefined &&
+      returned.length === requested.length &&
+      requested.every((field) => returned.includes(field)))
+  );
+}
+
 const Settings = z
   .object({
     name: z.string().trim().min(1).max(150),
@@ -26,6 +58,7 @@ const Settings = z
     postLogoutRedirectUris: z.array(z.string().url().max(2048)).max(10),
     requiredPermissions: z.array(Permission).min(1).max(1000),
     enabled: z.boolean(),
+    sharedUserFields: SharedUserFields.optional(),
   })
   .strict();
 const View = Settings.extend({ clientId: ClientId, version: Version }).strip();
@@ -174,6 +207,7 @@ export function createApplicationsRouter(config: AppConfig, logger: Logger): Rou
       );
       if (
         result.application.kind !== input.kind ||
+        !confirmsUserFields(input.sharedUserFields, result.application.sharedUserFields) ||
         (input.kind === 'public' && result.clientSecret !== undefined) ||
         (input.kind === 'confidential' && !result.clientSecret)
       )
@@ -186,6 +220,7 @@ export function createApplicationsRouter(config: AppConfig, logger: Logger): Rou
         audit: true,
         actor_id: (response.locals.principal as Principal).subject,
         client_id: result.application.clientId,
+        shared_user_fields: result.application.sharedUserFields,
       });
       response.status(201).json(result);
     }),
@@ -210,6 +245,7 @@ export function createApplicationsRouter(config: AppConfig, logger: Logger): Rou
       if (
         result.application.clientId !== clientId ||
         result.application.kind !== input.kind ||
+        !confirmsUserFields(input.sharedUserFields, result.application.sharedUserFields) ||
         (input.kind === 'public' && result.clientSecret !== undefined)
       )
         throw new HttpError(
@@ -221,6 +257,7 @@ export function createApplicationsRouter(config: AppConfig, logger: Logger): Rou
         audit: true,
         actor_id: (response.locals.principal as Principal).subject,
         client_id: clientId,
+        shared_user_fields: result.application.sharedUserFields,
       });
       response.json(result);
     }),

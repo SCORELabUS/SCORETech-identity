@@ -2244,6 +2244,18 @@ components:
             $ref: '#/components/schemas/ApplicationPermission'
         enabled:
           type: boolean
+        sharedUserFields:
+          type: array
+          uniqueItems: true
+          maxItems: 16
+          items:
+            type: string
+            enum: [email, preferred_username, name, given_name, family_name, display_name, phone_number, birthdate, bio, city, country, avatar, linkedin, instagram, facebook, x]
+          description: >-
+            User fields shared in ID tokens and UserInfo, subject to the email and profile
+            scopes. An empty selection shares no optional personal data. Omitting this
+            setting on update preserves the previous selection. Older applications keep
+            standard OIDC behavior until a selection is saved.
       required:
         - name
         - kind
